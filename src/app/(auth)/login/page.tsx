@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Card, Skeleton } from "@/components/ui";
 import { t } from "@/i18n";
+import { isDemo } from "@/lib/api";
 import { safeNext } from "@/lib/session-codec";
 import { LoginForm } from "./LoginForm";
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = { title: t.auth.login.title };
 
 async function LoginWithNext({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
-  return <LoginForm next={safeNext(next) ?? undefined} />;
+  return <LoginForm next={safeNext(next) ?? undefined} demo={isDemo} />;
 }
 
 function LoginSkeleton() {

@@ -14,6 +14,14 @@ describe("session codec", () => {
     expect(decodeSession(encodeSession({ ...s, role: "admin" as never }))).toBeNull();
   });
 
+  it("без верной подписи — null", () => {
+    const [payload, signature] = encodeSession(s).split(".");
+    const forged = Buffer.from(JSON.stringify({ ...s, role: "owner" })).toString("base64url");
+    expect(decodeSession(payload)).toBeNull();
+    expect(decodeSession(`${forged}.${signature}`)).toBeNull();
+    expect(decodeSession(`${payload}.${signature}x`)).toBeNull();
+  });
+
   it("доступ по ролям", () => {
     expect(canAccess("accountant", "/app/payroll")).toBe(true);
     expect(canAccess("employee", "/app/payroll")).toBe(false);

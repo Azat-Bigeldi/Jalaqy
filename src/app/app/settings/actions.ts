@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { api } from "@/lib/api";
+import { api, isDemo } from "@/lib/api";
 import type { CompanyUser, TaxRegime } from "@/lib/api/contracts";
 import { resetDb } from "@/lib/api/mock/db";
 import { str, toActionError, type ActionResult } from "@/lib/actions";
@@ -57,7 +57,7 @@ export async function setUserRoleAction(
 /** Только для мока: вернуть компанию из дизайна. */
 export async function resetDemoAction(): Promise<ActionResult> {
   await requireSession(["accountant", "owner"]);
-  if (process.env.JALAQY_API_URL) return { ok: false, error: "mock only" };
+  if (!isDemo) return { ok: false, error: "mock only" };
   resetDb();
   revalidatePath("/", "layout");
   return { ok: true };
