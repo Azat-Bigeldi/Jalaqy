@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Одна подпись сессии для сервера и для loginAs в тестах
+process.env.SESSION_SECRET ??= "jalaqy-e2e-secret";
+
 const PORT = Number(process.env.PORT ?? 3100);
 const baseURL = `http://localhost:${PORT}`;
 
@@ -23,7 +26,11 @@ export default defineConfig({
   ],
   webServer: {
     command: `npm run build && npm run start -- -p ${PORT}`,
-    env: { JALAQY_E2E: "1", JALAQY_DATA_DIR: ".e2e-data" },
+    env: {
+      JALAQY_E2E: "1",
+      SESSION_SECRET: process.env.SESSION_SECRET,
+      JALAQY_DATA_DIR: ".e2e-data",
+    },
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 240_000,

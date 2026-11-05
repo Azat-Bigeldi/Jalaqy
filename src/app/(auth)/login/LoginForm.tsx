@@ -15,7 +15,7 @@ import {
 
 const l = t.auth.login;
 
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm({ next, demo }: { next?: string; demo: boolean }) {
   const [codeState, requestCode, requesting] = useActionState<RequestCodeState, FormData>(
     requestCodeAction,
     null,
@@ -119,17 +119,21 @@ export function LoginForm({ next }: { next?: string }) {
           className="font-display text-2xl tracking-[0.3em] tabular-nums"
           error={err?.fields?.code ?? (err && !err.fields ? err.error : undefined)}
         />
-        <Banner tone="info">{l.demoHint}</Banner>
-        <RadioGroup
-          legend={l.demoRole}
-          name="role"
-          defaultValue="accountant"
-          orientation="horizontal"
-          options={(["accountant", "owner", "employee"] as const).map((r) => ({
-            value: r,
-            label: t.domain.roles[r],
-          }))}
-        />
+        {demo && (
+          <>
+            <Banner tone="info">{l.demoHint}</Banner>
+            <RadioGroup
+              legend={l.demoRole}
+              name="role"
+              defaultValue="accountant"
+              orientation="horizontal"
+              options={(["accountant", "owner", "employee"] as const).map((r) => ({
+                value: r,
+                label: t.domain.roles[r],
+              }))}
+            />
+          </>
+        )}
         <Button type="submit" size="xl" fullWidth loading={verifying}>
           {l.signIn}
         </Button>
