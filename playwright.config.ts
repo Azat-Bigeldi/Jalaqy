@@ -30,6 +30,8 @@ export default defineConfig({
       JALAQY_E2E: "1",
       SESSION_SECRET: process.env.SESSION_SECRET,
       JALAQY_DATA_DIR: ".e2e-data",
+      // e2e идут на моке, даже если в .env.local есть ключи Firebase
+      FIREBASE_PROJECT_ID: "",
     },
     url: baseURL,
     reuseExistingServer: !process.env.CI,

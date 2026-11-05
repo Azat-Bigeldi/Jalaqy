@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, isDemo } from "@/lib/api";
 import type { OnboardingInput } from "@/lib/api/contracts";
 import { toActionError, type ActionResult } from "@/lib/actions";
 import { setSession } from "@/lib/session";
@@ -10,13 +10,16 @@ import { setSession } from "@/lib/session";
 export async function finishOnboardingAction(input: OnboardingInput): Promise<ActionResult> {
   try {
     const company = await api.company.onboard(input);
-    // В моке новая компания заменяет демо-компанию; бэкенд создаст отдельную
-    await setSession({
-      userId: "u-acc",
-      role: "accountant",
-      name: company.name,
-      companyId: company.id,
-    });
+    // В моке новая компания заменяет демо-компанию и входим бухгалтером.
+    // С базой онбординг заполняет компанию того, кто уже вошёл: сессия не меняется
+    if (isDemo) {
+      await setSession({
+        userId: "u-acc",
+        role: "accountant",
+        name: company.name,
+        companyId: company.id,
+      });
+    }
   } catch (e) {
     return toActionError(e);
   }

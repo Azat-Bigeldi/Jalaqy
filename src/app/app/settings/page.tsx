@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/ui";
 import { t } from "@/i18n";
-import { api } from "@/lib/api";
+import { api, isDemo } from "@/lib/api";
 import { requireSession } from "@/lib/session";
 import { PageSkeleton } from "../_components/PageSkeleton";
 import { CompanyForm } from "./CompanyForm";
@@ -19,7 +19,7 @@ async function SettingsView() {
       <PageHeader title={t.settings.title} />
       <CompanyForm company={company} />
       <UsersSection users={users} />
-      {!process.env.JALAQY_API_URL && <ResetDemo />}
+      {isDemo && <ResetDemo />}
     </>
   );
 }

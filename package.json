@@ -16,6 +16,7 @@
     "check": "npm run lint && npm run typecheck && npm test",
     "icons": "node scripts/generate-icons.mjs",
     "firebase:users": "node --env-file=.env.local scripts/firebase-users.mjs",
+    "firebase:demo": "tsx --env-file=.env.local scripts/firebase-demo.mts",
     "screens": "playwright test -c playwright.screens.config.ts"
   },
   "dependencies": {
@@ -40,6 +41,7 @@
     "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^4.1.11"
   }
