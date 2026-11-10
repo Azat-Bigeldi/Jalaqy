@@ -75,11 +75,12 @@ test.describe("доступность открытых окон и шагов", 
     expect(await axe(page)).toEqual([]);
   });
 
-  test("второй шаг входа", async ({ page }) => {
+  test("ошибка входа", async ({ page }) => {
     await page.goto("/login");
     await page.getByLabel("Телефон или эл. почта").fill("buh@tulpan.kz");
-    await page.getByRole("button", { name: "Получить код" }).click();
-    await expect(page.getByLabel("Код из 4 цифр")).toBeFocused();
+    await page.getByLabel("Пароль").fill("wrong");
+    await page.getByRole("button", { name: "Войти" }).click();
+    await expect(page.getByText("Неверный логин или пароль")).toBeVisible();
     expect(await axe(page)).toEqual([]);
   });
 

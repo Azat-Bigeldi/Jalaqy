@@ -2,7 +2,7 @@ import { t } from "@/i18n";
 import { ApiError } from "../client";
 import type { Employee } from "../contracts";
 import { getDb } from "./db";
-import { MOCK_TODAY } from "./seed";
+import { nowIso } from "@/lib/clock";
 
 export const v = t.domain.validation;
 
@@ -15,7 +15,7 @@ export function latency(): Promise<void> {
 /** Возвращаем копии: вызывающий не должен менять «базу» напрямую. */
 export const clone = <T>(value: T): T => structuredClone(value);
 
-export const now = () => `${MOCK_TODAY}T12:00:00Z`;
+export const now = () => nowIso();
 
 export function validation(fields: Record<string, string | undefined>): never {
   throw new ApiError(

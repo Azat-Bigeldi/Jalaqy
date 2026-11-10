@@ -41,8 +41,7 @@ export function createHttpApi(
 
   return {
     auth: {
-      requestCode: (input) => call("POST /auth/code", "/auth/code", input),
-      verifyCode: (input) => call("POST /auth/verify", "/auth/verify", input),
+      login: (input) => call("POST /auth/login", "/auth/login", input),
     },
     company: {
       get: () => call("GET /company", "/company"),
@@ -52,6 +51,8 @@ export function createHttpApi(
       inviteUser: (input) => call("POST /company/users", "/company/users", input),
       setUserRole: (id, role) =>
         call("PATCH /company/users/{id}", `/company/users/${id}`, { role }),
+      setUserPassword: (id, password) =>
+        call("PUT /company/users/{id}/password", `/company/users/${id}/password`, { password }),
     },
     employees: {
       list: () => call("GET /employees", "/employees"),

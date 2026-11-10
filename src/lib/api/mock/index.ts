@@ -11,12 +11,17 @@ import {
   validateEmployeeInput,
 } from "@/lib/validation/forms";
 import { ApiError, type JalaqyApi } from "../client";
+import { isPasswordOk } from "@/lib/password";
 import type {
   Absence,
+  CompanyUser,
   Employee,
   EmployeeInput,
+  InviteUserInput,
   Period,
+  Role,
   Session,
+  TaxReport,
   TaxKind,
   TaxPayment,
   Timesheet,
@@ -26,7 +31,7 @@ import { getDb, nextId } from "./db";
 import { buildPayrollRun, isEmployedIn, payslips, taxDueDate } from "./payroll";
 import { withFailures } from "./failures";
 import { self } from "./self";
-import { CURRENT_PERIOD } from "./seed";
+import { currentPeriod, today } from "@/lib/clock";
 
 function makeEmployee(input: EmployeeInput): Employee {
   const errors = validateEmployeeInput(input);
@@ -46,6 +51,73 @@ function makeEmployee(input: EmployeeInput): Employee {
     status: "active",
     vacationDaysLeft: 24,
   };
+}
+
+/** Проверка нового пользователя; контакт сохраняем в нормальном виде (по нему идёт вход). */
+export function makeUser(input: InviteUserInput): CompanyUser {
+  const db = getDb();
+  const errors: Record<string, string> = {};
+  const parsed = parseLoginContact(input.contact);
+  const role: Role = ROLES.includes(input.role) ? input.role : "accountant";
+  const employee =
+    role === "employee"
+      ? db.employees.find((e) => e.id === input.employeeId && e.status !== "dismissed")
+      : undefined;
+  if (role === "employee" && !employee) errors.employeeId = v.employee;
+  if (role !== "employee" && !input.name.trim()) errors.name = v.name;
+  if (!parsed) errors.contact = v.contact;
+  else if (db.users.some((u) => u.contact === parsed.value)) errors.contact = v.contactTaken;
+  else if (role === "employee" && db.users.some((u) => u.employeeId === employee?.id)) {
+    errors.employeeId = v.employeeHasLogin;
+  }
+  if (!isPasswordOk(input.password)) errors.password = v.password;
+  if (Object.keys(errors).length) validation(errors);
+  return {
+    id: nextId("u"),
+    name: employee ? `${employee.firstName} ${employee.lastName}` : input.name.trim(),
+    contact: parsed!.value,
+    role,
+    ...(employee ? { employeeId: employee.id } : {}),
+    status: "invited",
+  };
+}
+
+const ROLES: Role[] = ["accountant", "owner", "employee"];
+
+/** Срок формы 200.00: 15-е число второго месяца после квартала. */
+function reportDue(year: number, q: number): string {
+  return q === 4 ? `${year + 1}-02-15` : `${year}-${String(q * 3 + 2).padStart(2, "0")}-15`;
+}
+
+/**
+ * Формы 200.00: сохранённые (сданные) плюс кварталы текущего года и прошлый
+ * IV квартал, пока не прошёл его срок. Закончился квартал — форма готова к сдаче.
+ */
+function reportsFor(saved: TaxReport[]): TaxReport[] {
+  const now = today();
+  const year = Number(now.slice(0, 4));
+  const quarters: Array<[number, number]> = [
+    [year - 1, 4],
+    [year, 1],
+    [year, 2],
+    [year, 3],
+    [year, 4],
+  ];
+  const byId = new Map(saved.map((r) => [r.id, r]));
+  for (const [y, q] of quarters) {
+    const id = `200-${y}-Q${q}`;
+    const due = reportDue(y, q);
+    if (byId.has(id) || (y < year && due < now)) continue;
+    const quarterEnd = periodEnd(`${y}-${String(q * 3).padStart(2, "0")}`);
+    byId.set(id, {
+      id,
+      form: "200.00",
+      quarter: `${y}-Q${q}`,
+      dueDate: due,
+      status: quarterEnd < now ? "ready" : "not_ready",
+    });
+  }
+  return [...byId.values()].sort((a, b) => a.quarter.localeCompare(b.quarter));
 }
 
 const TAX_KINDS: Array<{ kind: TaxKind; payer: TaxPayment["payer"] }> = [
@@ -89,19 +161,13 @@ function csv(rows: Array<Array<string | number>>): string {
 
 const baseApi: JalaqyApi = {
   auth: {
-    async requestCode({ contact }) {
+    async login({ contact, password, demoRole = "accountant" }) {
       await latency();
       const parsed = parseLoginContact(contact);
       if (!parsed) validation({ contact: v.contact });
-      return { channel: parsed.kind === "email" ? "email" : "sms", resendInSec: 60 };
-    },
-    async verifyCode({ contact, code, demoRole = "accountant" }) {
-      await latency();
-      const parsed = parseLoginContact(contact);
-      if (!parsed) validation({ contact: v.contact });
-      if (!/^\d{4}$/.test(code)) validation({ code: v.code });
-      // В моке подходит любой код, кроме 0000 — им проверяем экран ошибки
-      if (code === "0000") validation({ code: v.codeWrong });
+      if (!password) validation({ password: v.required });
+      // В демо подходит любой пароль, кроме «wrong» — им проверяем экран ошибки
+      if (password === "wrong") validation({ password: v.loginWrong });
       const db = getDb();
       const user =
         demoRole === "owner"
@@ -150,19 +216,24 @@ const baseApi: JalaqyApi = {
     },
     async inviteUser(input) {
       await latency();
-      const errors: Record<string, string> = {};
-      if (!input.name.trim()) errors.name = v.name;
-      if (!parseLoginContact(input.contact)) errors.contact = v.contact;
-      if (Object.keys(errors).length) validation(errors);
-      const user = { id: nextId("u"), ...input, status: "invited" as const };
+      const user = makeUser(input);
       getDb().users.push(user);
       return clone(user);
     },
     async setUserRole(userId, role) {
       await latency();
       const user = getDb().users.find((u) => u.id === userId) ?? notFound();
+      // сотрудник остаётся сотрудником: его кабинет привязан к карточке
+      if (user.role === "employee") {
+        throw new ApiError({ code: "conflict", message: t.ui.conflict }, 409);
+      }
       user.role = role;
       return clone(user);
+    },
+    async setUserPassword(userId, password) {
+      await latency();
+      if (!getDb().users.some((u) => u.id === userId)) notFound();
+      if (!isPasswordOk(password)) validation({ password: v.password });
     },
   },
 
@@ -192,7 +263,7 @@ const baseApi: JalaqyApi = {
       });
       if (hasErrors(errors)) validation(errors);
       if (patch.salary !== undefined && patch.salary !== e.salary) {
-        const from = patch.salaryFrom ?? `${CURRENT_PERIOD}-01`;
+        const from = patch.salaryFrom ?? `${currentPeriod()}-01`;
         e.salaryHistory = [
           ...e.salaryHistory.filter((h) => h.from < from),
           { from, salary: patch.salary },
@@ -206,7 +277,7 @@ const baseApi: JalaqyApi = {
     },
     async payslips(id) {
       await latency();
-      return payslips(getDb(), findEmployee(id), CURRENT_PERIOD);
+      return payslips(getDb(), findEmployee(id), currentPeriod());
     },
     payslip: self.payslip,
     certificates: self.certificates,
@@ -222,7 +293,7 @@ const baseApi: JalaqyApi = {
     async submit(period) {
       await latency();
       const db = getDb();
-      if (db.payrollStatus[period] !== "calculated") {
+      if (buildPayrollRun(db, period).status !== "calculated") {
         throw new ApiError({ code: "conflict", message: t.ui.conflict }, 409);
       }
       db.payrollStatus[period] = "awaiting_approval";
@@ -232,7 +303,7 @@ const baseApi: JalaqyApi = {
     async approve(period) {
       await latency();
       const db = getDb();
-      const status = db.payrollStatus[period];
+      const { status } = buildPayrollRun(db, period);
       if (status !== "awaiting_approval" && status !== "calculated") {
         throw new ApiError({ code: "conflict", message: t.ui.conflict }, 409);
       }
@@ -385,7 +456,7 @@ const baseApi: JalaqyApi = {
     },
     async reports() {
       await latency();
-      return clone(getDb().reports);
+      return reportsFor(clone(getDb().reports));
     },
   },
 

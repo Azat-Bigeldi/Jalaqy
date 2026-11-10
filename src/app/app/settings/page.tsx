@@ -13,12 +13,19 @@ export const metadata: Metadata = { title: t.settings.title };
 
 async function SettingsView() {
   await requireSession(["accountant", "owner"]);
-  const [company, users] = await Promise.all([api.company.get(), api.company.users()]);
+  const [company, users, employees] = await Promise.all([
+    api.company.get(),
+    api.company.users(),
+    api.employees.list(),
+  ]);
   return (
     <>
       <PageHeader title={t.settings.title} />
       <CompanyForm company={company} />
-      <UsersSection users={users} />
+      <UsersSection
+        users={users}
+        employees={employees.map((e) => ({ id: e.id, name: `${e.lastName} ${e.firstName}` }))}
+      />
       {isDemo && <ResetDemo />}
     </>
   );

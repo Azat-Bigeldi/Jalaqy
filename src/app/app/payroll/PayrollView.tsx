@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   Banner,
   buttonClasses,
@@ -49,7 +50,13 @@ export async function PayrollView({
   const session = await requireSession(["accountant", "owner"]);
   const sp = await searchParams;
   const period = isSupportedPeriod(sp.period, supportedYears()) ? sp.period : currentPeriod();
-  const [run, employees] = await Promise.all([api.payroll.get(period), api.employees.list()]);
+  const [run, employees, company] = await Promise.all([
+    api.payroll.get(period),
+    api.employees.list(),
+    api.company.get(),
+  ]);
+  // Новая компания: сначала реквизиты и сотрудники
+  if (!company.onboarded && session.role === "accountant") redirect("/onboarding");
   const { year, monthIndex } = parsePeriod(period);
   const month = `${monthName(monthIndex)} ${year}`;
   const totals = run.totals;

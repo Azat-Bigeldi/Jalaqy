@@ -16,11 +16,19 @@ test.describe("владелец", () => {
   test("вход демо-владельцем ведёт на его экран", async ({ page }) => {
     await page.goto("/login");
     await page.getByLabel("Телефон или эл. почта").fill("+7 701 111 22 33");
-    await page.getByRole("button", { name: "Получить код" }).click();
-    await page.getByLabel("Код из 4 цифр").fill("1234");
+    await page.getByLabel("Пароль").fill("demo-pass");
     await page.getByRole("radio", { name: "Владелец" }).check();
     await page.getByRole("button", { name: "Войти" }).click();
     await expect(page).toHaveURL(/\/owner$/);
+  });
+
+  test("владелец выходит из аккаунта", async ({ page, context, baseURL }) => {
+    await loginAs(context, baseURL!, "owner");
+    await page.goto("/owner");
+    await page.getByRole("button", { name: "Выйти" }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await page.goto("/owner");
+    await expect(page).toHaveURL(/\/login\?next=%2Fowner/);
   });
 
   test("итог, изменения, отпуск и подтверждение выплаты", async ({ page, context, baseURL }) => {

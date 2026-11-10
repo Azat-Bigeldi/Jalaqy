@@ -7,21 +7,22 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe("вход", () => {
-  test("без сессии — на вход с возвратом; неверный код; вход", async ({ page }) => {
+  test("без сессии — на вход с возвратом; неверный пароль; вход", async ({ page }) => {
     await page.goto("/app/taxes");
     await expect(page).toHaveURL(/\/login\?next=%2Fapp%2Ftaxes/);
     await page.getByLabel("Телефон или эл. почта").fill("123");
-    await page.getByRole("button", { name: "Получить код" }).click();
+    await page.getByLabel("Пароль").fill("secret-123");
+    await page.getByRole("button", { name: "Войти" }).click();
     await expect(page.getByText("Телефон +7 7XX XXX XX XX или эл. почта")).toBeVisible();
 
     await page.getByLabel("Телефон или эл. почта").fill("+7 701 123 45 14");
-    await page.getByRole("button", { name: "Получить код" }).click();
-    await expect(page.getByText(/Отправили SMS на \+7 701 123 45 14/)).toBeVisible();
-    await page.getByLabel("Код из 4 цифр").fill("0000");
+    await page.getByLabel("Пароль").fill("wrong");
     await page.getByRole("button", { name: "Войти" }).click();
-    await expect(page.getByText(/Неверный код/)).toBeVisible();
+    await expect(page.getByText("Неверный логин или пароль")).toBeVisible();
+    // логин остаётся в поле после ошибки
+    await expect(page.getByLabel("Телефон или эл. почта")).toHaveValue("+7 701 123 45 14");
 
-    await page.getByLabel("Код из 4 цифр").fill("1234");
+    await page.getByLabel("Пароль").fill("secret-123");
     await page.getByRole("button", { name: "Войти" }).click();
     await expect(page).toHaveURL(/\/app\/taxes$/);
     await expect(page.getByRole("heading", { level: 1, name: "Налоги и отчёты" })).toBeVisible();
@@ -151,17 +152,37 @@ test.describe("панель бухгалтера", () => {
     await expect(page.getByRole("heading", { name: "Трудовой договор" })).toBeVisible();
   });
 
-  test("настройки: приглашение и смена роли", async ({ page }) => {
+  test("настройки: пользователь с паролем, вход сотруднику, смена пароля и роли", async ({
+    page,
+  }) => {
     await page.goto("/app/settings");
-    await page.getByRole("button", { name: "Пригласить" }).click();
-    const sheet = page.getByRole("dialog", { name: "Пригласить пользователя" });
+    await page.getByRole("button", { name: "Добавить", exact: true }).click();
+    const sheet = page.getByRole("dialog", { name: "Добавить пользователя" });
     await sheet.getByLabel("Имя").fill("Сауле");
-    await sheet.getByLabel("Телефон или эл. почта").fill("нет");
-    await sheet.getByRole("button", { name: "Отправить приглашение" }).click();
+    await sheet.getByLabel("Телефон или эл. почта для входа").fill("нет");
+    await sheet.getByRole("textbox", { name: /^Пароль/ }).fill("123");
+    await sheet.getByRole("button", { name: "Добавить" }).click();
     await expect(sheet.getByText(/или эл. почта$/).last()).toBeVisible();
-    await sheet.getByLabel("Телефон или эл. почта").fill("saule@tulpan.kz");
-    await sheet.getByRole("button", { name: "Отправить приглашение" }).click();
+    await expect(sheet.getByText("Пароль — не короче 8 символов")).toBeVisible();
+    await sheet.getByLabel("Телефон или эл. почта для входа").fill("saule@tulpan.kz");
+    await sheet.getByRole("textbox", { name: /^Пароль/ }).fill("saule-2026");
+    await sheet.getByRole("button", { name: "Добавить" }).click();
     await expect(page.getByRole("cell", { name: "saule@tulpan.kz" })).toBeVisible();
+
+    // вход сотруднику: выбираем из списка, имя — из карточки
+    await page.getByRole("button", { name: "Добавить", exact: true }).click();
+    await sheet.getByRole("combobox", { name: /^Роль/ }).selectOption("employee");
+    await sheet.getByLabel("Сотрудник").selectOption({ label: "Бекова Асель" });
+    await sheet.getByLabel("Телефон или эл. почта для входа").fill("asel@tulpan.kz");
+    await sheet.getByRole("textbox", { name: /^Пароль/ }).fill("asel-2026!");
+    await sheet.getByRole("button", { name: "Добавить" }).click();
+    await expect(page.getByRole("cell", { name: "Асель Бекова" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Сменить пароль: Асель Бекова" }).click();
+    const pwd = page.getByRole("dialog", { name: "Новый пароль" });
+    await pwd.getByLabel("Новый пароль").fill("new-pass-1");
+    await pwd.getByRole("button", { name: "Сохранить пароль" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Пароль изменён" })).toBeVisible();
 
     await page.getByRole("combobox", { name: "Роль: Алия Омарова" }).selectOption("owner");
     await expect(page.getByRole("status").filter({ hasText: "Роль изменена" })).toBeVisible();

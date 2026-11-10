@@ -30,19 +30,11 @@ export interface Session {
   employeeId?: string;
 }
 
-export interface RequestCodeInput {
+export interface LoginInput {
   /** Телефон +7XXXXXXXXXX или email */
   contact: string;
-}
-export interface RequestCodeResult {
-  channel: "sms" | "email";
-  /** Через сколько секунд можно запросить код снова */
-  resendInSec: number;
-}
-export interface VerifyCodeInput {
-  contact: string;
-  code: string;
-  /** Только в моке: под какой ролью войти */
+  password: string;
+  /** Только в демо: под какой ролью войти */
   demoRole?: Role;
 }
 
@@ -60,18 +52,30 @@ export interface Company {
 
 export type CompanyUpdate = Partial<Pick<Company, "name" | "bin" | "regime" | "address">>;
 
+/** Кто может входить в компанию. Роль employee — сотрудник со своим кабинетом. */
 export interface CompanyUser {
   id: string;
   name: string;
   contact: string;
-  role: Exclude<Role, "employee">;
+  role: Role;
+  /** Для роли employee — id сотрудника */
+  employeeId?: string;
+  /** invited — ещё ни разу не входил */
   status: "active" | "invited";
 }
 
+/** Роли, которые можно менять в настройках (сотрудник остаётся сотрудником). */
+export type StaffRole = Exclude<Role, "employee">;
+
 export interface InviteUserInput {
+  /** Для сотрудника можно не указывать — возьмём из карточки */
   name: string;
   contact: string;
-  role: CompanyUser["role"];
+  role: Role;
+  /** Обязателен для роли employee */
+  employeeId?: string;
+  /** Первый пароль; пользователь получает его от того, кто добавил */
+  password: string;
 }
 
 /* ── Сотрудники ─────────────────────────────────────── */
