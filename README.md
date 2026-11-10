@@ -8,7 +8,11 @@ Jalaqy («жалақы» — зарплата по-казахски) — обл�
 - **веб-панель бухгалтера**;
 - **мобильные экраны (PWA)** владельца и сотрудника.
 
-Бэкенда пока нет. Данные отдаёт **мок-API в памяти** с теми же типами, что будут у FastAPI. Как заменить мок на настоящий бэкенд — в разделе [Подключение бэкенда](#подключение-бэкенда).
+Режим выбирается автоматически:
+
+- **Пилот (Firestore)** — если в `.env.local` есть ключи Firebase. Настоящие компании, вход по паролю, реальная дата. См. [Пилот на Firebase](#пилот-на-firebase).
+- **Демо** — без ключей. Данные из **мок-API в памяти**, вход с любым паролем и выбором роли, дата заморожена на 30 октября 2026.
+- **HTTP-бэкенд** — если задан `JALAQY_API_URL` (см. [Подключение бэкенда](#подключение-бэкенда)).
 
 Стек: Next.js 16 (App Router, Cache Components), React 19, TypeScript (strict), Tailwind CSS 4, Vitest, Playwright. Сторонней аналитики, CDN и внешних шрифтов нет: шрифты Onest и Golos Text раздаются с нашего сервера.
 
@@ -22,12 +26,41 @@ npx playwright install chromium   # нужен только для e2e-тест�
 npm run dev                       # http://localhost:3000
 ```
 
+### Пилот на Firebase
+
+Нужны в `.env.local`: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` (сервисный аккаунт) и `SESSION_SECRET` — длинная случайная строка, в production обязательна (`openssl rand -base64 48`). На хостинге (Vercel и т. п.) те же переменные задаются в настройках проекта.
+
+1. **Очистить базу от демо-данных** (один раз, необратимо):
+   ```bash
+   npm run admin -- list          # посмотреть, что в базе
+   npm run admin -- wipe --yes    # стереть все компании и пользователей
+   ```
+2. **Создать компанию и первого пользователя** — обычно бухгалтера:
+   ```bash
+   npm run admin -- company --company "ТОО Ромашка" --name "Айгуль Сапарова" \
+     --login buh@romashka.kz --password "придумайте-пароль"
+   ```
+   Логин — почта или телефон `+7 7XX XXX XX XX`. Пароль — от 8 символов.
+3. Бухгалтер входит на `/login` → попадает в **онбординг**: БИН, налоговый режим, сотрудники (вручную или CSV).
+4. Остальных — владельца, второго бухгалтера, **сотрудников** (вход в их кабинет `/me`) — добавляет бухгалтер: «Настройки» → «Пользователи и роли» → «Добавить». Там же «Сменить пароль», если кто-то забыл.
+
+Из консоли то же самое:
+
+```bash
+npm run admin -- user --company-id <id из list> --name "Ержан" --login +77011234567 --password "…" --role owner
+npm run admin -- password --login buh@romashka.kz --password "новый-пароль"
+```
+
+Пароли хранятся только хэшем (scrypt). После 5 неверных попыток вход для логина закрыт на 15 минут. Выйти из аккаунта: в панели — «Выйти» внизу меню, у владельца — иконка вверху справа, у сотрудника — «Профиль» → «Выйти».
+
+История расчётов компании начинается с месяца, в котором её создали: этот месяц сразу «посчитан» и его можно отправить владельцу.
+
 ### Демо-вход
 
-Откройте <http://localhost:3000/login>:
+Без ключей Firebase откройте <http://localhost:3000/login>:
 
 1. Введите любой телефон (`+7 7XX XXX XX XX`) или email.
-2. Введите код — любые 4 цифры. Код `0000` показывает экран ошибки.
+2. Введите любой пароль. Пароль `wrong` показывает экран ошибки.
 3. Выберите роль в поле «Войти как (демо)»:
 
 | Роль      | Куда попадает  | Что смотреть                                                           |
@@ -50,29 +83,32 @@ npm run dev                       # http://localhost:3000
 
 ## Команды
 
-| Команда                   | Что делает                                                      |
-| ------------------------- | --------------------------------------------------------------- |
-| `npm run dev`             | dev-сервер                                                      |
-| `npm run build` / `start` | production-сборка и запуск                                      |
-| `npm run check`           | lint + typecheck + юнит-тесты                                   |
-| `npm run lint`            | ESLint                                                          |
-| `npm run typecheck`       | генерация типов маршрутов Next и `tsc --noEmit`                 |
-| `npm test`                | юнит-тесты (Vitest)                                             |
-| `npm run e2e`             | e2e-тесты Playwright (сам собирает и поднимает сервер на :3100) |
-| `npm run screens`         | скриншоты всех экранов в `docs/screens/`                        |
-| `npm run icons`           | PNG-иконки PWA из SVG логотипа                                  |
-| `npm run format`          | Prettier                                                        |
+| Команда                   | Что делает                                                                 |
+| ------------------------- | -------------------------------------------------------------------------- |
+| `npm run dev`             | dev-сервер                                                                 |
+| `npm run build` / `start` | production-сборка и запуск                                                 |
+| `npm run check`           | lint + typecheck + юнит-тесты                                              |
+| `npm run lint`            | ESLint                                                                     |
+| `npm run typecheck`       | генерация типов маршрутов Next и `tsc --noEmit`                            |
+| `npm test`                | юнит-тесты (Vitest)                                                        |
+| `npm run e2e`             | e2e-тесты Playwright (сам собирает и поднимает сервер на :3100)            |
+| `npm run screens`         | скриншоты всех экранов в `docs/screens/`                                   |
+| `npm run icons`           | PNG-иконки PWA из SVG логотипа                                             |
+| `npm run admin -- …`      | компании и вход в Firestore: `company`, `user`, `password`, `list`, `wipe` |
+| `npm run format`          | Prettier                                                                   |
 
 ## Переменные окружения
 
-| Переменная               | По умолчанию        | Зачем                                                                       |
-| ------------------------ | ------------------- | --------------------------------------------------------------------------- |
-| `JALAQY_API_URL`         | —                   | URL бэкенда. Если задана — вместо мока работает HTTP-клиент                 |
-| `JALAQY_TODAY`           | `2026-10-30` в моке | «Сегодня» (`ГГГГ-ММ-ДД`): от неё считаются текущий месяц и сроки            |
-| `JALAQY_DATA_DIR`        | `./data`            | Куда писать заявки листа ожидания (`waitlist.json`)                         |
-| `JALAQY_MOCK_LATENCY_MS` | `0`                 | Искусственная задержка мока — увидеть скелетоны                             |
-| `JALAQY_MOCK_FAIL`       | —                   | Методы мока, которые должны падать: `payroll.get,employees.list` или `*`    |
-| `JALAQY_E2E`             | —                   | `1` включает служебные `/api/test/reset` и `/api/test/fail`. Только для e2e |
+| Переменная                                                             | По умолчанию        | Зачем                                                                       |
+| ---------------------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------- |
+| `JALAQY_API_URL`                                                       | —                   | URL бэкенда. Если задана — вместо мока работает HTTP-клиент                 |
+| `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | —                   | Ключи сервисного аккаунта Firebase. Если заданы — пилот на Firestore        |
+| `SESSION_SECRET`                                                       | — (в dev запасной)  | Ключ подписи cookie сессии. В production обязателен                         |
+| `JALAQY_TODAY`                                                         | `2026-10-30` в демо | «Сегодня» (`ГГГГ-ММ-ДД`). В пилоте не задавать — берётся дата по Алматы     |
+| `JALAQY_DATA_DIR`                                                      | `./data`            | Куда писать заявки листа ожидания (`waitlist.json`)                         |
+| `JALAQY_MOCK_LATENCY_MS`                                               | `0`                 | Искусственная задержка мока — увидеть скелетоны                             |
+| `JALAQY_MOCK_FAIL`                                                     | —                   | Методы мока, которые должны падать: `payroll.get,employees.list` или `*`    |
+| `JALAQY_E2E`                                                           | —                   | `1` включает служебные `/api/test/reset` и `/api/test/fail`. Только для e2e |
 
 ## Структура
 
@@ -148,8 +184,7 @@ export const api: JalaqyApi = process.env.JALAQY_API_URL
 
 ```ts
 export interface Endpoints {
-  "POST /auth/code": E<RequestCodeInput, RequestCodeResult>;
-  "POST /auth/verify": E<VerifyCodeInput, Session>;
+  "POST /auth/login": E<LoginInput, Session>;
   "GET /payroll/{period}": E<void, PayrollRun>;
   "POST /payroll/{period}/submit": E<void, PayrollRun>;
   "POST /payroll/{period}/approve": E<void, PayrollRun>;
@@ -186,12 +221,12 @@ export interface Endpoints {
 Что заменить при подключении:
 
 1. **Сессия.** Сейчас [`src/lib/session-codec.ts`](src/lib/session-codec.ts) хранит роль в неподписанной cookie (JSON в base64url). Нужно:
-   - выдавать подписанный токен в httpOnly-cookie на `POST /auth/verify`;
+   - выдавать подписанный токен в httpOnly-cookie на `POST /auth/login`;
    - проверять подпись в `decodeSession`;
    - передавать токен в `createHttpApi(url, getToken)`.
 2. **Лист ожидания.** Интерфейс `WaitlistRepository` в [`src/lib/waitlist/repository.ts`](src/lib/waitlist/repository.ts): заменить JSON-файл на PostgreSQL или вызов бэкенда. Роут `/api/waitlist` не меняется.
 3. **«Сегодня».** С бэкендом используется реальная дата, `JALAQY_TODAY` не задавать.
-4. **Демо.** Убрать демо-выбор роли при входе (`demoRole`) и кнопку «Сбросить демо-данные» — они видны только без `JALAQY_API_URL`.
+4. **Демо.** Демо-выбор роли при входе (`demoRole`) и кнопка «Сбросить демо-данные» видны только в демо-режиме (`isDemo`: нет ни `JALAQY_API_URL`, ни ключей Firebase).
 
 ## Данные и приватность
 

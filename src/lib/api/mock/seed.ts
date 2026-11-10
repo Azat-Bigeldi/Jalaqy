@@ -15,7 +15,7 @@ import type {
 export const MOCK_TODAY = "2026-10-30";
 /** Текущий расчётный период. */
 export const CURRENT_PERIOD: Period = "2026-10";
-/** С какого месяца в моке есть история расчётов. */
+/** С какого месяца в демо есть история расчётов. */
 export const FIRST_PERIOD: Period = "2026-01";
 
 /** Достраивает 11 цифр до валидного ИИН/БИН (подбирает последнюю цифру базы, если нужно). */
@@ -45,6 +45,8 @@ function employee(
 
 export interface MockDb {
   company: Company;
+  /** С какого месяца компания ведёт расчёт в Jalaqy (история листков — отсюда) */
+  firstPeriod: Period;
   users: CompanyUser[];
   employees: Employee[];
   absences: Absence[];
@@ -191,6 +193,7 @@ export function seed(): MockDb {
   payrollStatus[CURRENT_PERIOD] = "calculated";
 
   return {
+    firstPeriod: FIRST_PERIOD,
     company: {
       id: "tulpan",
       name: "Кофейня «Тюльпан»",
@@ -268,6 +271,24 @@ export function seed(): MockDb {
         requestedAt: "2026-09-02T08:00:00Z",
       },
     ],
+    seq: 100,
+  };
+}
+
+/** Пустая компания: создаётся скриптом firebase:company, заполняется онбордингом. */
+export function emptyCompany(id: string, name: string, firstPeriod: Period): MockDb {
+  return {
+    firstPeriod,
+    company: { id, name, bin: "", regime: "simplified", address: "", onboarded: false },
+    users: [],
+    employees: [],
+    absences: [],
+    payrollStatus: {},
+    payrollTimestamps: {},
+    paidTaxes: {},
+    reports: [],
+    contracts: [],
+    certificates: [],
     seq: 100,
   };
 }

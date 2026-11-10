@@ -6,7 +6,7 @@ import type { Absence, Certificate } from "../contracts";
 import { clone, findEmployee, latency, now, v, validation } from "./core";
 import { getDb, nextId } from "./db";
 import { buildPayrollRun, isEmployedIn, payDate, payrollLine } from "./payroll";
-import { CURRENT_PERIOD, FIRST_PERIOD } from "./seed";
+import { currentPeriod } from "@/lib/clock";
 
 /** Листок виден сотруднику после подтверждения владельцем. */
 const VISIBLE = new Set(["approved", "paid", "closed"]);
@@ -23,7 +23,7 @@ export const self: Pick<JalaqyApi["employees"], "payslip" | "certificates" | "re
     const employee = findEmployee(id);
     let target = period;
     if (!target) {
-      for (let p = CURRENT_PERIOD; p >= FIRST_PERIOD; p = shiftPeriod(p, -1)) {
+      for (let p = currentPeriod(); p >= db.firstPeriod; p = shiftPeriod(p, -1)) {
         if (isEmployedIn(employee, p) && VISIBLE.has(db.payrollStatus[p] ?? "")) {
           target = p;
           break;

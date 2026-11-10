@@ -166,12 +166,60 @@ describe("мок: табель и налоги", () => {
 });
 
 describe("мок: вход", () => {
-  it("код 0000 — ошибка, остальные 4 цифры — вход", async () => {
+  it("пароль «wrong» — ошибка, любой другой — вход под выбранной ролью", async () => {
     await expect(
-      api.auth.verifyCode({ contact: "+77011234514", code: "0000" }),
+      api.auth.login({ contact: "+77011234514", password: "wrong" }),
     ).rejects.toBeInstanceOf(ApiError);
-    const s = await api.auth.verifyCode({ contact: "+77011234514", code: "1234" });
-    expect(s.role).toBe("accountant");
+    const s = await api.auth.login({ contact: "+77011234514", password: "x", demoRole: "owner" });
+    expect(s.role).toBe("owner");
+  });
+});
+
+describe("мок: пользователи", () => {
+  it("добавление: контакт нормализуется, пароль и занятый логин проверяются", async () => {
+    const user = await api.company.inviteUser({
+      name: "Алия",
+      contact: "Aliya@Mail.KZ",
+      role: "owner",
+      password: "12345678",
+    });
+    expect(user).toMatchObject({ contact: "aliya@mail.kz", status: "invited" });
+
+    const short = await api.company
+      .inviteUser({ name: "Б", contact: "b@mail.kz", role: "owner", password: "123" })
+      .catch((e: unknown) => e);
+    expect((short as ApiError).body.fields?.password).toBeTruthy();
+
+    const taken = await api.company
+      .inviteUser({ name: "В", contact: "aliya@mail.kz", role: "owner", password: "12345678" })
+      .catch((e: unknown) => e);
+    expect((taken as ApiError).body.fields?.contact).toBeTruthy();
+  });
+
+  it("вход сотруднику: имя из карточки, второй вход тому же сотруднику — ошибка", async () => {
+    const user = await api.company.inviteUser({
+      name: "",
+      contact: "+7 701 555 44 33",
+      role: "employee",
+      employeeId: "asel",
+      password: "12345678",
+    });
+    expect(user).toMatchObject({
+      name: "Асель Бекова",
+      employeeId: "asel",
+      contact: "+77015554433",
+    });
+    const again = await api.company
+      .inviteUser({
+        name: "",
+        contact: "asel@mail.kz",
+        role: "employee",
+        employeeId: "asel",
+        password: "12345678",
+      })
+      .catch((e: unknown) => e);
+    expect((again as ApiError).body.fields?.employeeId).toBeTruthy();
+    await expect(api.company.setUserRole(user.id, "owner")).rejects.toBeInstanceOf(ApiError);
   });
 });
 

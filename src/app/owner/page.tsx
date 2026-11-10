@@ -3,7 +3,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { LogoMark } from "@/components/brand";
 import { MobileContent, MobileEyebrow, MobileFooter } from "@/components/mobile/MobileShell";
-import { Banner, Card, Skeleton } from "@/components/ui";
+import { Banner, Card, IconButton, Skeleton } from "@/components/ui";
+import { IconLogout } from "@/components/ui/icons";
+import { logoutAction } from "@/app/(auth)/actions";
 import { RequestActions } from "@/app/app/timesheet/RequestActions";
 import { interpolate, t } from "@/i18n";
 import { api } from "@/lib/api";
@@ -62,7 +64,17 @@ async function OwnerHome() {
             <LogoMark tone="primary" size={28} />
             <span className="truncate text-body font-semibold">{company.name}</span>
           </div>
-          <Notifications items={notifications} />
+          <div className="flex items-center gap-1">
+            <Notifications items={notifications} />
+            <form action={logoutAction}>
+              <IconButton
+                type="submit"
+                variant="ghost"
+                label={t.ui.logout}
+                icon={<IconLogout size={20} />}
+              />
+            </form>
+          </div>
         </div>
 
         {run.status === "draft" ? (

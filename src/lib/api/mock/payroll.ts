@@ -23,10 +23,12 @@ import type {
   PayrollChange,
   PayrollLine,
   PayrollRun,
+  PayrollStatus,
   Period,
   PayslipSummary,
 } from "../contracts";
-import { FIRST_PERIOD, type MockDb } from "./seed";
+import { currentPeriod } from "@/lib/clock";
+import type { MockDb } from "./seed";
 
 /** Оклад, действующий на дату (последнее изменение не позже даты). */
 export function salaryAt(employee: Employee, date: string): number | null {
@@ -159,6 +161,18 @@ export function payDate(period: Period): string {
   return `${shiftPeriod(period, 1)}-05`;
 }
 
+/**
+ * Статус расчёта. Если он ещё не менялся, месяц с сотрудниками от начала работы
+ * в Jalaqy до текущего считается посчитанным — его можно отправить владельцу.
+ */
+export function statusOf(db: MockDb, period: Period, lineCount: number): PayrollStatus {
+  const saved = db.payrollStatus[period];
+  if (saved) return saved;
+  return lineCount > 0 && period >= db.firstPeriod && period <= currentPeriod()
+    ? "calculated"
+    : "draft";
+}
+
 export function buildPayrollRun(db: MockDb, period: Period): PayrollRun {
   const employees = db.employees.filter((e) => isEmployedIn(e, period));
   const lines = employees.map((e) => payrollLine(db, e, period));
@@ -177,19 +191,19 @@ export function buildPayrollRun(db: MockDb, period: Period): PayrollRun {
     period,
     periodStart: periodStart(period),
     periodEnd: periodEnd(period),
-    status: db.payrollStatus[period] ?? "draft",
+    status: statusOf(db, period, lines.length),
     lines,
     totals,
     taxDueDate: taxDueDate(period),
     payDate: payDate(period),
-    changes: period > FIRST_PERIOD ? changes(db, period) : [],
+    changes: period > db.firstPeriod ? changes(db, period) : [],
     ...db.payrollTimestamps[period],
   };
 }
 
 export function payslips(db: MockDb, employee: Employee, until: Period): PayslipSummary[] {
   const out: PayslipSummary[] = [];
-  for (let p = FIRST_PERIOD; p <= until; p = shiftPeriod(p, 1)) {
+  for (let p = db.firstPeriod; p <= until; p = shiftPeriod(p, 1)) {
     if (!isEmployedIn(employee, p)) continue;
     const line = payrollLine(db, employee, p);
     out.push({
@@ -198,7 +212,7 @@ export function payslips(db: MockDb, employee: Employee, until: Period): Payslip
       withheld: line.employee.total,
       net: line.net,
       employerTotal: line.employer.total,
-      status: db.payrollStatus[p] ?? "draft",
+      status: statusOf(db, p, 1),
       paidAt: db.payrollTimestamps[p]?.paidAt,
     });
   }

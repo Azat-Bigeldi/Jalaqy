@@ -24,22 +24,20 @@ import type {
   PayrollRun,
   Payslip,
   PayslipSummary,
-  RequestCodeInput,
-  RequestCodeResult,
+  LoginInput,
   Session,
+  StaffRole,
   TaxPayment,
   TaxReport,
   Timesheet,
-  VerifyCodeInput,
 } from "./contracts";
 
 type E<Body, Response> = { body: Body; response: Response };
 type File = { filename: string; content: string };
 
 export interface Endpoints {
-  // Вход: код по SMS или почте; verify ставит httpOnly-cookie сессии
-  "POST /auth/code": E<RequestCodeInput, RequestCodeResult>;
-  "POST /auth/verify": E<VerifyCodeInput, Session>;
+  // Вход по телефону или почте и паролю; ответ ставит httpOnly-cookie сессии
+  "POST /auth/login": E<LoginInput, Session>;
 
   // Компания и пользователи
   "GET /company": E<void, Company>;
@@ -47,7 +45,8 @@ export interface Endpoints {
   "POST /company/onboarding": E<OnboardingInput, Company>;
   "GET /company/users": E<void, CompanyUser[]>;
   "POST /company/users": E<InviteUserInput, CompanyUser>;
-  "PATCH /company/users/{id}": E<{ role: CompanyUser["role"] }, CompanyUser>;
+  "PATCH /company/users/{id}": E<{ role: StaffRole }, CompanyUser>;
+  "PUT /company/users/{id}/password": E<{ password: string }, void>;
 
   // Сотрудники (сотрудник с ролью employee видит только свой {id})
   "GET /employees": E<void, Employee[]>;
