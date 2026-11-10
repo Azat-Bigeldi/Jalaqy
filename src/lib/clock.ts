@@ -1,15 +1,32 @@
 import type { ISODate, Period } from "@/lib/api/contracts";
 import { MOCK_TODAY } from "@/lib/api/mock/seed";
 
+/** Демо (мок без базы и бэкенда): время заморожено, чтобы демо всегда показывало октябрь. */
+function isFrozen(): boolean {
+  return !process.env.JALAQY_API_URL && !process.env.FIREBASE_PROJECT_ID;
+}
+
+const ALMATY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Almaty",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 /**
- * «Сегодня» для расчётов. В моке время заморожено (MOCK_TODAY), чтобы демо
- * всегда показывало октябрьский расчёт; с бэкендом — реальная дата.
+ * «Сегодня» для расчётов — по времени Казахстана. В демо заморожено (MOCK_TODAY).
  * Переопределяется JALAQY_TODAY=ГГГГ-ММ-ДД.
  */
 export function today(): ISODate {
   if (process.env.JALAQY_TODAY) return process.env.JALAQY_TODAY;
-  if (!process.env.JALAQY_API_URL) return MOCK_TODAY;
-  return new Date().toISOString().slice(0, 10);
+  if (isFrozen()) return MOCK_TODAY;
+  return ALMATY.format(new Date());
+}
+
+/** Момент «сейчас» для отметок времени (ISO, UTC). */
+export function nowIso(): string {
+  if (process.env.JALAQY_TODAY || isFrozen()) return `${today()}T12:00:00Z`;
+  return new Date().toISOString();
 }
 
 export function currentPeriod(): Period {

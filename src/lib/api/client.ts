@@ -20,13 +20,12 @@ import type {
   PayrollRun,
   PayslipSummary,
   Period,
-  RequestCodeInput,
-  RequestCodeResult,
+  LoginInput,
   Session,
+  StaffRole,
   TaxPayment,
   TaxReport,
   Timesheet,
-  VerifyCodeInput,
 } from "./contracts";
 
 /**
@@ -35,8 +34,8 @@ import type {
  */
 export interface JalaqyApi {
   auth: {
-    requestCode(input: RequestCodeInput): Promise<RequestCodeResult>;
-    verifyCode(input: VerifyCodeInput): Promise<Session>;
+    /** Вход по телефону или почте и паролю */
+    login(input: LoginInput): Promise<Session>;
   };
   company: {
     get(): Promise<Company>;
@@ -44,7 +43,9 @@ export interface JalaqyApi {
     onboard(input: OnboardingInput): Promise<Company>;
     users(): Promise<CompanyUser[]>;
     inviteUser(input: InviteUserInput): Promise<CompanyUser>;
-    setUserRole(userId: string, role: CompanyUser["role"]): Promise<CompanyUser>;
+    setUserRole(userId: string, role: StaffRole): Promise<CompanyUser>;
+    /** Задать пользователю новый пароль (забыл или первый вход) */
+    setUserPassword(userId: string, password: string): Promise<void>;
   };
   employees: {
     list(): Promise<Employee[]>;

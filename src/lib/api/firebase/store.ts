@@ -1,5 +1,11 @@
 import "server-only";
-import type { DocumentReference, Firestore, Transaction } from "firebase-admin/firestore";
+import type {
+  DocumentReference,
+  DocumentSnapshot,
+  Firestore,
+  QuerySnapshot,
+  Transaction,
+} from "firebase-admin/firestore";
 import { db } from "@/lib/firebase/admin";
 import { parseLoginContact } from "@/lib/validation/contact";
 import type { CompanyUser } from "../contracts";
@@ -11,7 +17,8 @@ import type { MockDb } from "../mock/seed";
  * companies/{companyId}                — company, payrollStatus, payrollTimestamps,
  *                                        paidTaxes, reports, seq
  * companies/{companyId}/employees/{id} — сотрудники (и absences, contracts, certificates)
- * users/{userId}                       — пользователи всех компаний (по ним идёт вход)
+ * users/{userId}                       — пользователи всех компаний (по ним идёт вход;
+ *                                        passwordHash пишется только в firebase/index.ts)
  *
  * Загружаем компанию целиком в форму MockDb, выполняем логику мока и
  * сохраняем только изменившиеся документы. Порядок в списках — поле _i.
@@ -20,8 +27,6 @@ import type { MockDb } from "../mock/seed";
 const LISTS = ["employees", "absences", "contracts", "certificates"] as const;
 type ListName = (typeof LISTS)[number];
 type Item = { id: string };
-
-const STAFF_ROLES = new Set(["accountant", "owner"]);
 
 /** Firestore не принимает undefined — убираем, как JSON. */
 const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -36,32 +41,52 @@ function companyRef(store: Firestore, companyId: string): DocumentReference {
   return store.collection("companies").doc(companyId);
 }
 
-export async function loadCompany(tx: Transaction, companyId: string): Promise<Loaded | null> {
+/**
+ * Загрузить компанию. С транзакцией — для изменений (чтение под блокировкой),
+ * без неё — для чтения: заметно быстрее и не блокирует параллельные запросы.
+ */
+export async function loadCompany(
+  tx: Transaction | null,
+  companyId: string,
+): Promise<Loaded | null> {
   const store = db();
   const ref = companyRef(store, companyId);
-  const [root, users, ...lists] = await Promise.all([
-    tx.get(ref),
-    tx.get(store.collection("users").where("companyId", "==", companyId)),
-    ...LISTS.map((name) => tx.get(ref.collection(name).orderBy("_i"))),
-  ]);
-  if (!root.exists) return null;
+  const users = store.collection("users").where("companyId", "==", companyId);
+  const lists = LISTS.map((name) => ref.collection(name).orderBy("_i"));
+  const [root, usersSnap, ...listSnaps] = await Promise.all(
+    tx
+      ? [tx.get(ref), tx.get(users), ...lists.map((q) => tx.get(q))]
+      : [ref.get(), users.get(), ...lists.map((q) => q.get())],
+  );
+  if (!(root as DocumentSnapshot).exists) return null;
 
   const userDocs = new Map<string, string>();
-  const staff: CompanyUser[] = [];
-  for (const doc of users.docs) {
+  const people: CompanyUser[] = [];
+  for (const doc of (usersSnap as QuerySnapshot).docs) {
     const u = doc.data();
-    if (!STAFF_ROLES.has(u.role)) continue;
     userDocs.set(doc.id, doc.id);
-    staff.push({ id: doc.id, name: u.name, contact: u.contact, role: u.role, status: u.status });
-  }
-
-  const state = { ...root.data(), users: staff } as MockDb;
-  LISTS.forEach((name, i) => {
-    (state as unknown as Record<ListName, Item[]>)[name] = lists[i]!.docs.map((doc) => {
-      const { _i, ...item } = doc.data();
-      void _i;
-      return { ...item, id: doc.id };
+    // passwordHash в состояние не попадает — наружу уходят только эти поля
+    people.push({
+      id: doc.id,
+      name: u.name,
+      contact: u.contact,
+      role: u.role,
+      ...(u.employeeId ? { employeeId: u.employeeId } : {}),
+      status: u.status,
     });
+  }
+  people.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+  const data = (root as DocumentSnapshot).data()!;
+  const state = { ...data, firstPeriod: data.firstPeriod ?? "2026-01", users: people } as MockDb;
+  LISTS.forEach((name, i) => {
+    (state as unknown as Record<ListName, Item[]>)[name] = (listSnaps[i] as QuerySnapshot).docs.map(
+      (doc) => {
+        const { _i, ...item } = doc.data();
+        void _i;
+        return { ...item, id: doc.id };
+      },
+    );
   });
   return { state, userDocs };
 }
@@ -83,6 +108,7 @@ export function saveCompany(
   const after = loaded.state;
 
   const rootOf = (s: MockDb) => ({
+    firstPeriod: s.firstPeriod,
     company: s.company,
     payrollStatus: s.payrollStatus,
     payrollTimestamps: s.payrollTimestamps,
@@ -133,7 +159,14 @@ function saveUsers(
     const contact = parseLoginContact(user.contact)?.value ?? user.contact;
     tx.set(
       store.collection("users").doc(docId),
-      plain({ name: user.name, contact, role: user.role, status: user.status, companyId }),
+      plain({
+        name: user.name,
+        contact,
+        role: user.role,
+        employeeId: user.employeeId,
+        status: user.status,
+        companyId,
+      }),
       { merge: true },
     );
   }

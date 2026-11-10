@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { api, isDemo } from "@/lib/api";
-import type { CompanyUser, TaxRegime } from "@/lib/api/contracts";
+import type { Role, StaffRole, TaxRegime } from "@/lib/api/contracts";
 import { resetDb } from "@/lib/api/mock/db";
 import { str, toActionError, type ActionResult } from "@/lib/actions";
 import { requireSession } from "@/lib/session";
@@ -31,7 +31,9 @@ export async function inviteUserAction(_prev: FormState, form: FormData): Promis
     await api.company.inviteUser({
       name: str(form, "name"),
       contact: str(form, "contact"),
-      role: str(form, "role") as CompanyUser["role"],
+      role: str(form, "role") as Role,
+      employeeId: str(form, "employeeId") || undefined,
+      password: String(form.get("password") ?? ""),
     });
     revalidatePath("/", "layout");
     return { ok: true };
@@ -40,10 +42,17 @@ export async function inviteUserAction(_prev: FormState, form: FormData): Promis
   }
 }
 
-export async function setUserRoleAction(
-  userId: string,
-  role: CompanyUser["role"],
-): Promise<ActionResult> {
+export async function setUserPasswordAction(_prev: FormState, form: FormData): Promise<FormState> {
+  await requireSession(["accountant", "owner"]);
+  try {
+    await api.company.setUserPassword(str(form, "userId"), String(form.get("password") ?? ""));
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function setUserRoleAction(userId: string, role: StaffRole): Promise<ActionResult> {
   await requireSession(["accountant", "owner"]);
   try {
     await api.company.setUserRole(userId, role);

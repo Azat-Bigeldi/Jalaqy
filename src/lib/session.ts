@@ -1,10 +1,14 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import type { Role, Session } from "@/lib/api/contracts";
 import { decodeSession, encodeSession, SESSION_COOKIE } from "./session-codec";
 
 export async function getSession(): Promise<Session | null> {
+  // Страницы с сессией персональные и считаются «на сегодня» (lib/clock):
+  // рендерим их на запрос, не при пререндере
+  await connection();
   const store = await cookies();
   return decodeSession(store.get(SESSION_COOKIE)?.value);
 }
