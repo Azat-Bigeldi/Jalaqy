@@ -42,6 +42,13 @@ export function createHttpApi(
   return {
     auth: {
       login: (input) => call("POST /auth/login", "/auth/login", input),
+      register: (input) => call("POST /auth/register", "/auth/register", input),
+    },
+    account: {
+      get: (id) => call("GET /account/{id}", `/account/${id}`),
+      update: (id, patch) => call("PATCH /account/{id}", `/account/${id}`, patch),
+      changePassword: (id, current, next) =>
+        call("PUT /account/{id}/password", `/account/${id}/password`, { current, next }),
     },
     company: {
       get: () => call("GET /company", "/company"),
@@ -53,9 +60,14 @@ export function createHttpApi(
         call("PATCH /company/users/{id}", `/company/users/${id}`, { role }),
       setUserPassword: (id, password) =>
         call("PUT /company/users/{id}/password", `/company/users/${id}/password`, { password }),
+      removeUser: (id) => call("DELETE /company/users/{id}", `/company/users/${id}`),
     },
     employees: {
-      list: () => call("GET /employees", "/employees"),
+      list: (opts = {}) =>
+        call(
+          "GET /employees",
+          `/employees${q({ withDismissed: opts.withDismissed ? "1" : undefined })}`,
+        ),
       get: (id) => call("GET /employees/{id}", `/employees/${id}`),
       create: (input) => call("POST /employees", "/employees", input),
       update: (id, patch) => call("PATCH /employees/{id}", `/employees/${id}`, patch),
@@ -69,11 +81,20 @@ export function createHttpApi(
         call("GET /employees/{id}/certificates", `/employees/${id}/certificates`),
       requestCertificate: (id, input) =>
         call("POST /employees/{id}/certificates", `/employees/${id}/certificates`, input),
+      dismiss: (id, date) =>
+        call("POST /employees/{id}/dismiss", `/employees/${id}/dismiss`, { date }),
+      restore: (id) => call("POST /employees/{id}/restore", `/employees/${id}/restore`),
+      remove: (id) => call("DELETE /employees/{id}", `/employees/${id}`),
+      certificateRequests: () => call("GET /certificates/requests", "/certificates/requests"),
+      markCertificateReady: (id) =>
+        call("POST /certificates/{id}/ready", `/certificates/${id}/ready`),
     },
     payroll: {
       get: (period) => call("GET /payroll/{period}", `/payroll/${period}`),
       submit: (period) => call("POST /payroll/{period}/submit", `/payroll/${period}/submit`),
       approve: (period) => call("POST /payroll/{period}/approve", `/payroll/${period}/approve`),
+      markPaid: (period) => call("POST /payroll/{period}/paid", `/payroll/${period}/paid`),
+      reopen: (period) => call("POST /payroll/{period}/reopen", `/payroll/${period}/reopen`),
       export1c: (period) => call("GET /payroll/{period}/export/1c", `/payroll/${period}/export/1c`),
     },
     timesheet: {
@@ -84,6 +105,7 @@ export function createHttpApi(
       decideAbsence: (id, decision) =>
         call("POST /absences/{id}/decision", `/absences/${id}/decision`, { decision }),
       requestLeave: (input) => call("POST /absences/requests", "/absences/requests", input),
+      deleteAbsence: (id) => call("DELETE /absences/{id}", `/absences/${id}`),
     },
     taxes: {
       payments: (period) => call("GET /taxes/{period}/payments", `/taxes/${period}/payments`),
@@ -92,6 +114,8 @@ export function createHttpApi(
       paymentOrder: (id) =>
         call("GET /taxes/payments/{id}/order", `/taxes/payments/${encodeURIComponent(id)}/order`),
       reports: () => call("GET /taxes/reports", "/taxes/reports"),
+      setReportSubmitted: (id, submitted) =>
+        call("PUT /taxes/reports/{id}", `/taxes/reports/${id}`, { submitted }),
     },
     contracts: {
       list: () => call("GET /contracts", "/contracts"),

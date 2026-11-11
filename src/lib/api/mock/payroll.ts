@@ -41,7 +41,10 @@ export function salaryAt(employee: Employee, date: string): number | null {
 
 /** Работал ли сотрудник хотя бы день в периоде. */
 export function isEmployedIn(employee: Employee, period: Period): boolean {
-  return employee.hireDate <= periodEnd(period) && employee.status !== "dismissed";
+  if (employee.hireDate > periodEnd(period)) return false;
+  if (employee.status !== "dismissed") return true;
+  // уволенный остаётся в расчётах до месяца увольнения включительно
+  return employee.dismissDate !== undefined && employee.dismissDate >= periodStart(period);
 }
 
 /** Рабочие дни отсутствия без содержания внутри периода. */
@@ -83,7 +86,16 @@ function monthGross(db: MockDb, employee: Employee, period: Period): MonthCalc {
   const normDays = workingDays(year, monthIndex);
   const salary = salaryAt(employee, periodEnd(period)) ?? 0;
   const firstDay = periodOf(employee.hireDate) === period ? dayOf(employee.hireDate) : 1;
-  const inRange = workingDays(year, monthIndex, firstDay);
+  const lastDay =
+    employee.status === "dismissed" &&
+    employee.dismissDate &&
+    periodOf(employee.dismissDate) === period
+      ? dayOf(employee.dismissDate)
+      : undefined;
+  const inRange =
+    lastDay !== undefined && lastDay < firstDay
+      ? 0
+      : workingDays(year, monthIndex, firstDay, lastDay);
   const workedDays = Math.max(0, inRange - unpaidDays(db.absences, employee.id, period));
   return { normDays, workedDays, salary, gross: prorateSalary(salary, workedDays, normDays) };
 }
@@ -131,6 +143,10 @@ function changes(db: MockDb, period: Period): PayrollChange[] {
   const out: PayrollChange[] = [];
   for (const e of db.employees) {
     if (!isEmployedIn(e, period)) continue;
+    if (e.status === "dismissed" && e.dismissDate && periodOf(e.dismissDate) === period) {
+      out.push({ kind: "dismissed", employeeId: e.id, shortName: e.shortName });
+      continue;
+    }
     if (periodOf(e.hireDate) === period) {
       out.push({ kind: "hired", employeeId: e.id, shortName: e.shortName, position: e.position });
       continue;

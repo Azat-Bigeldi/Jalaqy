@@ -12,8 +12,10 @@ export type CompanyDraft = OnboardingInput["company"];
 export function CompanyStep({
   value,
   errors,
+  firstPeriods,
   onChange,
 }: {
+  firstPeriods: Array<{ value: string; label: string }>;
   value: CompanyDraft;
   errors: Partial<Record<keyof CompanyDraft, string>>;
   onChange: (patch: Partial<CompanyDraft>) => void;
@@ -50,6 +52,14 @@ export function CompanyStep({
           label: regimes[k],
         }))}
         error={errors.regime}
+      />
+      <Select
+        label={t.manage.onboarding.firstPeriod}
+        hint={t.manage.onboarding.firstPeriodHint}
+        value={value.firstPeriod ?? ""}
+        onChange={(e) => onChange({ firstPeriod: e.target.value })}
+        options={firstPeriods}
+        error={errors.firstPeriod}
       />
     </div>
   );

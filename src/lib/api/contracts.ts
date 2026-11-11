@@ -38,6 +38,16 @@ export interface LoginInput {
   demoRole?: Role;
 }
 
+/** Регистрация новой компании: тот, кто регистрирует, становится владельцем. */
+export interface RegisterInput {
+  companyName: string;
+  /** Имя владельца */
+  name: string;
+  /** Телефон +7XXXXXXXXXX или email — логин */
+  contact: string;
+  password: string;
+}
+
 /* ── Компания ───────────────────────────────────────── */
 
 export interface Company {
@@ -48,9 +58,13 @@ export interface Company {
   address: string;
   /** Пройден ли онбординг */
   onboarded: boolean;
+  /** С какого месяца компания считает зарплату в Jalaqy */
+  firstPeriod: Period;
 }
 
-export type CompanyUpdate = Partial<Pick<Company, "name" | "bin" | "regime" | "address">>;
+export type CompanyUpdate = Partial<
+  Pick<Company, "name" | "bin" | "regime" | "address" | "firstPeriod">
+>;
 
 /** Кто может входить в компанию. Роль employee — сотрудник со своим кабинетом. */
 export interface CompanyUser {
@@ -100,6 +114,8 @@ export interface Employee {
   iin: string;
   phone: string;
   status: "active" | "invited" | "dismissed";
+  /** Последний рабочий день (если уволен) */
+  dismissDate?: ISODate;
   /** Остаток дней отпуска */
   vacationDaysLeft: number;
 }
@@ -115,9 +131,8 @@ export interface EmployeeInput {
   phone?: string;
 }
 
-export type EmployeeUpdate = Partial<
-  Pick<EmployeeInput, "position" | "salary" | "hasDeduction" | "phone">
-> & {
+export type EmployeeUpdate = Partial<EmployeeInput> & {
+  vacationDaysLeft?: number;
   /** С какой даты действует новый оклад (по умолчанию — с 1-го числа текущего месяца) */
   salaryFrom?: ISODate;
 };
@@ -136,6 +151,8 @@ export interface Absence {
   status: AbsenceStatus;
   requestedAt: ISODateTime;
   comment?: string;
+  /** Сколько дней отпуска списано при одобрении (вернём при удалении) */
+  daysDeducted?: number;
 }
 
 export interface AbsenceInput {
@@ -305,7 +322,7 @@ export interface Contract {
 /* ── Онбординг ──────────────────────────────────────── */
 
 export interface OnboardingInput {
-  company: Pick<Company, "name" | "bin" | "regime">;
+  company: Pick<Company, "name" | "bin" | "regime"> & { firstPeriod?: Period };
   employees: EmployeeInput[];
 }
 

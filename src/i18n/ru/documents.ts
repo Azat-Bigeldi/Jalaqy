@@ -17,7 +17,7 @@ export const documents = {
     ],
   },
   paymentOrder: {
-    title: "ПЛАТЁЖНОЕ ПОРУЧЕНИЕ — ЧЕРНОВИК (демо)",
+    title: "ПЛАТЁЖНОЕ ПОРУЧЕНИЕ — ЧЕРНОВИК",
     payer: "Плательщик: {company}, БИН {bin}",
     payment: "Платёж: {short} — {long}",
     period: "Период: {period}",
@@ -26,7 +26,7 @@ export const documents = {
     quarter: "Квартал отчётности: {quarter}",
   },
   certificate: {
-    title: "СПРАВКА — {kind} (демо)",
+    title: "СПРАВКА — {kind}",
     company: "{company}, БИН {bin}",
     employee: "{name}, {position}",
     since: "Работает с {date}",

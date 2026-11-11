@@ -1,16 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { Card, PageHeader, Table, type TableColumn } from "@/components/ui";
+import { Banner, Card, PageHeader, Table, type TableColumn } from "@/components/ui";
 import { interpolate, t } from "@/i18n";
 import { api, isApiError } from "@/lib/api";
 import type { PayrollLine, PayslipSummary } from "@/lib/api/contracts";
-import { currentPeriod } from "@/lib/clock";
+import { currentPeriod, today } from "@/lib/clock";
 import { formatDate, formatNumber, formatPeriod, formatTenge, monthName } from "@/lib/format";
 import { parsePeriod } from "@/lib/period";
 import { requireSession } from "@/lib/session";
 import { AbsenceStatusBadge, PayrollStatusBadge } from "../../_components/StatusBadges";
 import { EditEmployeeForm } from "./EditEmployeeForm";
+import { ManageEmployee } from "./ManageEmployee";
 
 const c = t.employees.card;
 
@@ -106,7 +107,7 @@ const historyColumns: TableColumn<PayslipSummary>[] = [
 ];
 
 export async function EmployeeView({ params }: { params: Promise<{ id: string }> }) {
-  const session = await requireSession(["accountant", "owner"]);
+  await requireSession(["accountant", "owner"]);
   const { id } = await params;
   const period = currentPeriod();
   let data;
@@ -137,7 +138,14 @@ export async function EmployeeView({ params }: { params: Promise<{ id: string }>
       />
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-4">
-          <EditEmployeeForm employee={employee} readOnly={session.role !== "accountant"} />
+          {employee.status === "dismissed" && employee.dismissDate && (
+            <Banner tone="info">
+              {interpolate(t.manage.employees.dismissedOn, {
+                date: formatDate(employee.dismissDate),
+              })}
+            </Banner>
+          )}
+          <EditEmployeeForm employee={employee} readOnly={false} />
           <section aria-labelledby="emp-history" className="flex flex-col gap-3">
             <h2 id="emp-history" className="font-display text-xl font-bold tracking-display">
               {c.history}
@@ -150,6 +158,13 @@ export async function EmployeeView({ params }: { params: Promise<{ id: string }>
               minWidth={620}
             />
           </section>
+          <ManageEmployee
+            id={employee.id}
+            name={`${employee.firstName} ${employee.lastName}`}
+            dismissed={employee.status === "dismissed"}
+            defaultDate={today()}
+            minDate={employee.hireDate}
+          />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           {line && <MonthCard line={line} month={`${monthName(monthIndex)} ${year}`} />}

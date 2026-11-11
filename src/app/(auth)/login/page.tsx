@@ -1,16 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { Card, Skeleton } from "@/components/ui";
 import { t } from "@/i18n";
 import { isDemo } from "@/lib/api";
-import { safeNext } from "@/lib/session-codec";
+import { getSession } from "@/lib/session";
+import { homeFor, safeNext } from "@/lib/session-codec";
 import { LoginForm } from "./LoginForm";
 
 export const metadata: Metadata = { title: t.auth.login.title };
 
 async function LoginWithNext({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
+  // уже вошли — сразу на свой экран
+  const session = await getSession();
+  if (session) redirect(homeFor(session.role));
   return <LoginForm next={safeNext(next) ?? undefined} demo={isDemo} />;
 }
 

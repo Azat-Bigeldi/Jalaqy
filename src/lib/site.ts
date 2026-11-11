@@ -18,7 +18,17 @@ export function currentSite(value = process.env.JALAQY_SITE): Site {
 }
 
 /** Разделы приложения: на лендинге их нет. */
-const APP_PREFIXES = ["/app", "/owner", "/me", "/login", "/onboarding", "/launch", "/offline"];
+const APP_PREFIXES = [
+  "/app",
+  "/owner",
+  "/me",
+  "/login",
+  "/register",
+  "/logout",
+  "/onboarding",
+  "/launch",
+  "/offline",
+];
 
 /** Разделы только лендинга: в приложении их нет. */
 const LANDING_ONLY = ["/api/waitlist", "/styleguide"];

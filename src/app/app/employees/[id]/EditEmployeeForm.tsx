@@ -2,15 +2,14 @@
 
 import { submitWith } from "@/lib/form-submit";
 import { useActionState } from "react";
-import { Button, Card, Input, MoneyInput, Switch, useToast } from "@/components/ui";
+import { Button, Card, DatePicker, Input, MoneyInput, Switch, useToast } from "@/components/ui";
 import { t } from "@/i18n";
 import type { Employee } from "@/lib/api/contracts";
-import { formatDate } from "@/lib/format";
 import { formatKzPhone, normalizeKzPhone } from "@/lib/validation/contact";
-import { maskIin } from "@/lib/validation/iin";
 import { updateEmployeeAction, type EmployeeFormState } from "../actions";
 
 const c = t.employees.card;
+const m = t.manage.employees;
 
 export function EditEmployeeForm({
   employee,
@@ -43,6 +42,24 @@ export function EditEmployeeForm({
       >
         <input type="hidden" name="id" value={employee.id} />
         <Input
+          name="firstName"
+          label={m.firstName}
+          defaultValue={employee.firstName}
+          autoComplete="off"
+          required
+          disabled={readOnly}
+          error={errors.firstName}
+        />
+        <Input
+          name="lastName"
+          label={m.lastName}
+          defaultValue={employee.lastName}
+          autoComplete="off"
+          required
+          disabled={readOnly}
+          error={errors.lastName}
+        />
+        <Input
           name="position"
           label={c.position}
           defaultValue={employee.position}
@@ -71,20 +88,36 @@ export function EditEmployeeForm({
           disabled={readOnly}
           error={errors.phone}
         />
-        <dl className="m-0 grid grid-cols-2 gap-4 sm:col-span-1">
-          <div className="flex flex-col gap-1.5">
-            <dt className="text-sm font-semibold">{c.hireDate}</dt>
-            <dd className="m-0 flex min-h-12 items-center text-base">
-              {formatDate(employee.hireDate)}
-            </dd>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <dt className="text-sm font-semibold">{c.iin}</dt>
-            <dd className="m-0 flex min-h-12 items-center text-base tabular-nums">
-              {maskIin(employee.iin)}
-            </dd>
-          </div>
-        </dl>
+        <DatePicker
+          name="hireDate"
+          label={m.hireDate}
+          defaultValue={employee.hireDate}
+          required
+          disabled={readOnly}
+          error={errors.hireDate}
+        />
+        <Input
+          name="iin"
+          label={m.iin}
+          defaultValue={employee.iin}
+          inputMode="numeric"
+          maxLength={12}
+          autoComplete="off"
+          required
+          disabled={readOnly}
+          error={errors.iin}
+        />
+        <Input
+          name="vacationDaysLeft"
+          label={m.vacationDays}
+          defaultValue={String(employee.vacationDaysLeft)}
+          inputMode="numeric"
+          maxLength={3}
+          autoComplete="off"
+          required
+          disabled={readOnly}
+          error={errors.vacationDaysLeft}
+        />
         <div className="sm:col-span-2">
           <Switch
             name="hasDeduction"

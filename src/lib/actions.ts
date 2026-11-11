@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { t } from "@/i18n";
 import { isApiError } from "@/lib/api/client";
 
@@ -13,6 +14,8 @@ export function toActionError(error: unknown): {
   error: string;
   fields?: Record<string, string>;
 } {
+  // redirect() из слоя данных (сессия отозвана → /logout) не превращаем в ошибку формы
+  unstable_rethrow(error);
   if (isApiError(error)) {
     return { ok: false, error: error.body.message, fields: error.body.fields };
   }

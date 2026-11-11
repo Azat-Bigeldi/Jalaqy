@@ -68,7 +68,12 @@ export function LoginForm({ next, demo }: { next?: string; demo: boolean }) {
           {l.newCompany}
         </Link>
       ) : (
-        <p className="text-center text-caption text-muted">{l.forgot}</p>
+        <>
+          <Link href="/register" className="text-center text-body font-semibold">
+            {t.manage.register.toRegister}
+          </Link>
+          <p className="text-center text-caption text-muted">{l.forgot}</p>
+        </>
       )}
     </Card>
   );

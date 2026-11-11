@@ -25,6 +25,7 @@ import type {
   Payslip,
   PayslipSummary,
   LoginInput,
+  RegisterInput,
   Session,
   StaffRole,
   TaxPayment,
@@ -38,6 +39,12 @@ type File = { filename: string; content: string };
 export interface Endpoints {
   // Вход по телефону или почте и паролю; ответ ставит httpOnly-cookie сессии
   "POST /auth/login": E<LoginInput, Session>;
+  "POST /auth/register": E<RegisterInput, Session>;
+
+  // Свой профиль
+  "GET /account/{id}": E<void, CompanyUser>;
+  "PATCH /account/{id}": E<{ name: string }, CompanyUser>;
+  "PUT /account/{id}/password": E<{ current: string; next: string }, void>;
 
   // Компания и пользователи
   "GET /company": E<void, Company>;
@@ -47,6 +54,7 @@ export interface Endpoints {
   "POST /company/users": E<InviteUserInput, CompanyUser>;
   "PATCH /company/users/{id}": E<{ role: StaffRole }, CompanyUser>;
   "PUT /company/users/{id}/password": E<{ password: string }, void>;
+  "DELETE /company/users/{id}": E<void, void>;
 
   // Сотрудники (сотрудник с ролью employee видит только свой {id})
   "GET /employees": E<void, Employee[]>;
@@ -58,11 +66,18 @@ export interface Endpoints {
   "GET /employees/{id}/payslips/{period}": E<void, Payslip>;
   "GET /employees/{id}/certificates": E<void, Certificate[]>;
   "POST /employees/{id}/certificates": E<CertificateInput, Certificate>;
+  "POST /employees/{id}/dismiss": E<{ date: string }, Employee>;
+  "POST /employees/{id}/restore": E<void, Employee>;
+  "DELETE /employees/{id}": E<void, void>;
+  "GET /certificates/requests": E<void, Certificate[]>;
+  "POST /certificates/{id}/ready": E<void, Certificate>;
 
   // Зарплата
   "GET /payroll/{period}": E<void, PayrollRun>;
   "POST /payroll/{period}/submit": E<void, PayrollRun>;
   "POST /payroll/{period}/approve": E<void, PayrollRun>;
+  "POST /payroll/{period}/paid": E<void, PayrollRun>;
+  "POST /payroll/{period}/reopen": E<void, PayrollRun>;
   "GET /payroll/{period}/export/1c": E<void, File>;
 
   // Табель и отпуска
@@ -72,12 +87,14 @@ export interface Endpoints {
   "POST /absences": E<AbsenceInput, Absence>;
   "POST /absences/{id}/decision": E<{ decision: Exclude<AbsenceStatus, "pending"> }, Absence>;
   "POST /absences/requests": E<LeaveRequestInput, Absence>;
+  "DELETE /absences/{id}": E<void, void>;
 
   // Налоги и отчёты
   "GET /taxes/{period}/payments": E<void, TaxPayment[]>;
   "POST /taxes/payments/{id}/paid": E<void, TaxPayment>;
   "GET /taxes/payments/{id}/order": E<void, File>;
   "GET /taxes/reports": E<void, TaxReport[]>;
+  "PUT /taxes/reports/{id}": E<{ submitted: boolean }, TaxReport>;
 
   // Договоры
   "GET /contracts": E<void, Contract[]>;

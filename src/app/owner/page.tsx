@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { LogoMark } from "@/components/brand";
 import { MobileContent, MobileEyebrow, MobileFooter } from "@/components/mobile/MobileShell";
-import { Banner, Card, IconButton, Skeleton } from "@/components/ui";
-import { IconLogout } from "@/components/ui/icons";
-import { logoutAction } from "@/app/(auth)/actions";
+import { Avatar, Banner, ButtonLink, Card, EmptyState, Skeleton } from "@/components/ui";
+import { IconUsers } from "@/components/ui/icons";
+import { ConfirmAction } from "@/app/app/_components/ConfirmAction";
+import { markPayrollPaidAction } from "@/app/app/payroll/actions";
 import { RequestActions } from "@/app/app/timesheet/RequestActions";
 import { interpolate, t } from "@/i18n";
 import { api } from "@/lib/api";
@@ -18,6 +20,7 @@ import { ApproveButton } from "./ApproveButton";
 import { Notifications } from "./Notifications";
 
 const o = t.mobile.owner;
+const mo = t.manage.owner;
 
 export const metadata: Metadata = { title: o.approve };
 
@@ -35,7 +38,7 @@ function changeText(c: PayrollChange): string {
 }
 
 async function OwnerHome() {
-  await requireSession(["owner"]);
+  const session = await requireSession(["owner"]);
   const period = currentPeriod();
   const [company, run, pending, employees] = await Promise.all([
     api.company.get(),
@@ -43,16 +46,18 @@ async function OwnerHome() {
     api.timesheet.absences({ status: "pending" }),
     api.employees.list(),
   ]);
+  // Новая компания: сначала реквизиты и сотрудники
+  if (!company.onboarded) redirect("/onboarding");
   const names = Object.fromEntries(employees.map((e) => [e.id, e.shortName]));
   const { monthIndex } = parsePeriod(period);
   const month = monthName(monthIndex);
   const prevMonth = monthName(parsePeriod(shiftPeriod(period, -1)).monthIndex, "genitive");
   const canApprove = run.status === "calculated" || run.status === "awaiting_approval";
-  const approved = run.status === "approved" || run.status === "paid" || run.status === "closed";
+  const hasLines = run.lines.length > 0;
   const totals = run.totals;
 
   const notifications = [
-    ...(canApprove ? [interpolate(o.ready, { month })] : []),
+    ...(canApprove && hasLines ? [interpolate(o.ready, { month })] : []),
     ...pending.map((a) => interpolate(o.leaveRequest, { name: names[a.employeeId] ?? "" })),
   ];
 
@@ -64,22 +69,31 @@ async function OwnerHome() {
             <LogoMark tone="primary" size={28} />
             <span className="truncate text-body font-semibold">{company.name}</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1.5">
             <Notifications items={notifications} />
-            <form action={logoutAction}>
-              <IconButton
-                type="submit"
-                variant="ghost"
-                label={t.ui.logout}
-                icon={<IconLogout size={20} />}
-              />
-            </form>
+            <Link
+              href="/owner/profile"
+              aria-label={mo.profile}
+              title={mo.profile}
+              className="inline-flex size-11 items-center justify-center rounded-button no-underline"
+            >
+              <Avatar name={session.name} size={40} />
+            </Link>
           </div>
         </div>
 
-        {run.status === "draft" ? (
-          <Banner tone="info" title={interpolate(o.notReady, { month })}>
-            {o.notReadyText}
+        {run.lines.length === 0 ? (
+          <EmptyState
+            icon={<IconUsers size={26} />}
+            title={mo.emptyTitle}
+            headingLevel={2}
+            action={<ButtonLink href="/app/employees">{mo.addEmployees}</ButtonLink>}
+          >
+            {interpolate(mo.emptyText, { month })}
+          </EmptyState>
+        ) : run.status === "draft" ? (
+          <Banner tone="info" title={interpolate(mo.notReadyOwner, { month })}>
+            {mo.notReadyOwnerText}
           </Banner>
         ) : (
           <Card
@@ -113,7 +127,7 @@ async function OwnerHome() {
           </Card>
         )}
 
-        {run.status !== "draft" && (
+        {hasLines && run.status !== "draft" && (
           <Card
             as="section"
             aria-labelledby="own-changes"
@@ -175,21 +189,43 @@ async function OwnerHome() {
           </Card>
         )}
 
-        {approved && (
+        {run.status === "approved" && (
           <Banner tone="success" title={interpolate(o.alreadyApproved, { month })}>
-            {interpolate(o.alreadyApprovedText, { date: formatDate(run.payDate, "dayMonth") })}
+            {interpolate(mo.approvedText, { date: formatDate(run.payDate, "dayMonth") })}
+          </Banner>
+        )}
+        {(run.status === "paid" || run.status === "closed") && (
+          <Banner tone="success" title={interpolate(mo.paidTitle, { month })}>
+            {run.status === "closed"
+              ? mo.closedText
+              : interpolate(mo.paidText, { date: formatDate(run.taxDueDate, "dayMonth") })}
           </Banner>
         )}
       </MobileContent>
 
-      {run.status !== "draft" && (
-        <MobileFooter>
-          {canApprove && <ApproveButton period={period} />}
+      <MobileFooter>
+        {hasLines && canApprove && <ApproveButton period={period} />}
+        {hasLines && run.status === "approved" && (
+          <ConfirmAction
+            size="xl"
+            fullWidth
+            title={t.manage.payroll.markPaidTitle}
+            text={interpolate(t.manage.payroll.markPaidText, { net: formatTenge(totals.net) })}
+            done={t.manage.payroll.paid}
+            action={markPayrollPaidAction.bind(null, period)}
+          >
+            {mo.markPaid}
+          </ConfirmAction>
+        )}
+        {hasLines && run.status !== "draft" && (
           <Link href="/owner/breakdown" className="py-2.5 text-center text-body font-semibold">
             {o.details}
           </Link>
-        </MobileFooter>
-      )}
+        )}
+        <Link href="/app/payroll" className="py-2.5 text-center text-body font-semibold">
+          {mo.openPanel}
+        </Link>
+      </MobileFooter>
     </>
   );
 }

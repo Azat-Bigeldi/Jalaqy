@@ -17,6 +17,7 @@ export async function updateCompanyAction(_prev: FormState, form: FormData): Pro
       bin: str(form, "bin").replace(/\s/g, ""),
       regime: str(form, "regime") as TaxRegime,
       address: str(form, "address"),
+      firstPeriod: str(form, "firstPeriod") || undefined,
     });
     revalidatePath("/", "layout");
     return { ok: true };
@@ -56,6 +57,17 @@ export async function setUserRoleAction(userId: string, role: StaffRole): Promis
   await requireSession(["accountant", "owner"]);
   try {
     await api.company.setUserRole(userId, role);
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function removeUserAction(userId: string): Promise<ActionResult> {
+  const session = await requireSession(["accountant", "owner"]);
+  try {
+    await api.company.removeUser(userId, session.userId);
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (e) {

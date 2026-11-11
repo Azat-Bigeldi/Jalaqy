@@ -262,3 +262,120 @@ describe("мок: экраны сотрудника и владельца", () =
     expect(list).toHaveLength(2);
   });
 });
+
+describe("мок: пилот — выплата, увольнение, доступы", () => {
+  it("подтверждён → выплачен → налоги оплачены → месяц закрыт", async () => {
+    await api.payroll.approve("2026-10");
+    await expect(api.payroll.submit("2026-10")).rejects.toBeInstanceOf(ApiError);
+    const paid = await api.payroll.markPaid("2026-10");
+    expect(paid.status).toBe("paid");
+    expect(paid.paidAt).toBeTruthy();
+    // выплаченный расчёт вернуть на доработку нельзя
+    await expect(api.payroll.reopen("2026-10")).rejects.toBeInstanceOf(ApiError);
+    for (const p of await api.taxes.payments("2026-10")) await api.taxes.markPaid(p.id);
+    expect((await api.payroll.get("2026-10")).status).toBe("closed");
+  });
+
+  it("налоги оплачены раньше выплаты — месяц закрывается после отметки о выплате", async () => {
+    await api.payroll.approve("2026-10");
+    for (const p of await api.taxes.payments("2026-10")) await api.taxes.markPaid(p.id);
+    expect((await api.payroll.get("2026-10")).status).toBe("approved");
+    expect((await api.payroll.markPaid("2026-10")).status).toBe("closed");
+  });
+
+  it("подтверждённый расчёт можно вернуть: статус снова «расчёт готов», листок скрыт", async () => {
+    await api.payroll.approve("2026-10");
+    expect((await api.employees.payslip("daniyar")).period).toBe("2026-10");
+    const run = await api.payroll.reopen("2026-10");
+    expect(run.status).toBe("calculated");
+    expect(run.approvedAt).toBeUndefined();
+    expect((await api.employees.payslip("daniyar")).period).toBe("2026-09");
+  });
+
+  it("уволенный считается до последнего дня и остаётся в прошлых месяцах", async () => {
+    const before = await api.payroll.get("2026-10");
+    await api.employees.dismiss("timur", "2026-10-15");
+    const october = await api.payroll.get("2026-10");
+    const line = october.lines.find((l) => l.employeeId === "timur")!;
+    expect(line.workedDays).toBeLessThan(line.normDays);
+    expect(line.gross).toBeLessThan(before.lines.find((l) => l.employeeId === "timur")!.gross);
+    expect(october.changes).toContainEqual({
+      kind: "dismissed",
+      employeeId: "timur",
+      shortName: "Тимур А.",
+    });
+    expect((await api.employees.list()).map((e) => e.id)).not.toContain("timur");
+    expect((await api.employees.list({ withDismissed: true })).map((e) => e.id)).toContain("timur");
+    await expect(api.employees.dismiss("madina", "2020-01-01")).rejects.toBeInstanceOf(ApiError);
+    // отмена увольнения возвращает полный месяц
+    await api.employees.restore("timur");
+    expect((await api.payroll.get("2026-10")).totals.net).toBe(before.totals.net);
+  });
+
+  it("удалить карточку можно только без подтверждённых выплат", async () => {
+    // у Мадины есть закрытые месяцы
+    await expect(api.employees.remove("madina")).rejects.toBeInstanceOf(ApiError);
+    const created = await api.employees.create({
+      firstName: "Тест",
+      lastName: "Ошибочный",
+      position: "Стажёр",
+      salary: 200_000,
+      hireDate: "2026-10-20",
+      hasDeduction: true,
+      iin: withCheckDigit("99010150012"),
+    });
+    await api.employees.remove(created.id);
+    await expect(api.employees.get(created.id)).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("правка карточки: имя, дата приёма, остаток отпуска", async () => {
+    const e = await api.employees.update("timur", {
+      firstName: "Темир",
+      hireDate: "2026-10-12",
+      vacationDaysLeft: 5,
+    });
+    expect(e.shortName).toBe("Темир А.");
+    expect(e.vacationDaysLeft).toBe(5);
+    const line = (await api.payroll.get("2026-10")).lines.find((l) => l.employeeId === "timur")!;
+    expect(line.workedDays).toBeLessThan(line.normDays);
+    expect(line.gross).toBeGreaterThan(0);
+    await expect(api.employees.update("timur", { vacationDaysLeft: -1 })).rejects.toBeInstanceOf(
+      ApiError,
+    );
+  });
+
+  it("доступ: себя удалить нельзя, другого — можно", async () => {
+    await expect(api.company.removeUser("u-acc", "u-acc")).rejects.toBeInstanceOf(ApiError);
+    await api.company.removeUser("u-inv", "u-acc");
+    expect((await api.company.users()).map((u) => u.id)).not.toContain("u-inv");
+  });
+
+  it("удаление одобренного отпуска возвращает списанные дни", async () => {
+    const before = (await api.employees.get("asel")).vacationDaysLeft;
+    await api.timesheet.decideAbsence("abs-1", "approved");
+    expect((await api.employees.get("asel")).vacationDaysLeft).toBe(before - 5);
+    await api.timesheet.deleteAbsence("abs-1");
+    expect((await api.employees.get("asel")).vacationDaysLeft).toBe(before);
+  });
+
+  it("месяц начала расчёта: не позже текущего", async () => {
+    await expect(api.company.update({ firstPeriod: "2026-12" })).rejects.toBeInstanceOf(ApiError);
+    expect((await api.company.update({ firstPeriod: "2026-09" })).firstPeriod).toBe("2026-09");
+  });
+
+  it("справки: заказанная видна бухгалтеру и становится готовой", async () => {
+    const cert = await api.employees.requestCertificate("asel", {
+      kind: "employment",
+      purpose: "Для банка",
+    });
+    expect((await api.employees.certificateRequests()).map((c) => c.id)).toEqual([cert.id]);
+    await api.employees.markCertificateReady(cert.id);
+    expect(await api.employees.certificateRequests()).toEqual([]);
+  });
+
+  it("форма 200.00: отметка «сдана» и её снятие", async () => {
+    const ready = (await api.taxes.reports()).find((r) => r.status === "ready")!;
+    expect((await api.taxes.setReportSubmitted(ready.id, true)).status).toBe("submitted");
+    expect((await api.taxes.setReportSubmitted(ready.id, false)).status).toBe("ready");
+  });
+});
