@@ -50,7 +50,7 @@ export async function findUserByContact(
   return doc ? { id: doc.id, data: doc.data() as UserDoc } : null;
 }
 
-export const firebaseAuth: JalaqyApi["auth"] = {
+export const firebaseAuth: Pick<JalaqyApi["auth"], "login"> = {
   async login({ contact, password }) {
     const parsed = parseLoginContact(contact);
     if (!parsed) validation({ contact: v.contact });

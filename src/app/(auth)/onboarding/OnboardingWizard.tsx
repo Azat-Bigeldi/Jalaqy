@@ -12,11 +12,25 @@ import { EmployeesStep } from "./EmployeesStep";
 
 const o = t.auth.onboarding;
 
-const emptyCompany: CompanyDraft = { bin: "", name: "", regime: "" as CompanyDraft["regime"] };
-
-export function OnboardingWizard({ defaultHireDate }: { defaultHireDate: string }) {
+export function OnboardingWizard({
+  defaultHireDate,
+  companyName = "",
+  firstPeriods,
+  defaultFirstPeriod,
+}: {
+  defaultHireDate: string;
+  /** Название из регистрации — подставляем в форму */
+  companyName?: string;
+  firstPeriods: Array<{ value: string; label: string }>;
+  defaultFirstPeriod: string;
+}) {
   const [step, setStep] = useState(0);
-  const [company, setCompany] = useState<CompanyDraft>(emptyCompany);
+  const [company, setCompany] = useState<CompanyDraft>({
+    bin: "",
+    name: companyName,
+    regime: "" as CompanyDraft["regime"],
+    firstPeriod: defaultFirstPeriod,
+  });
   const [companyErrors, setCompanyErrors] = useState<Partial<Record<keyof CompanyDraft, string>>>(
     {},
   );
@@ -84,6 +98,7 @@ export function OnboardingWizard({ defaultHireDate }: { defaultHireDate: string 
         <CompanyStep
           value={company}
           errors={companyErrors}
+          firstPeriods={firstPeriods}
           onChange={(patch) => setCompany((c) => ({ ...c, ...patch }))}
         />
       )}

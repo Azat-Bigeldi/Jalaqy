@@ -10,6 +10,7 @@ import { documents } from "./ru/documents";
 import { domain } from "./ru/domain";
 import { employees } from "./ru/employees";
 import { landing } from "./ru/landing";
+import { manage } from "./ru/manage";
 import { mobile } from "./ru/mobile";
 import { settings } from "./ru/settings";
 import { styleguide } from "./ru/styleguide";
@@ -25,6 +26,7 @@ export const ru = {
   timesheet,
   taxes,
   settings,
+  manage,
   mobile,
   landing,
   documents,

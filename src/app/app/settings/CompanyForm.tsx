@@ -10,7 +10,13 @@ import { updateCompanyAction, type FormState } from "./actions";
 const s = t.settings.company;
 const regimes = t.domain.regimes;
 
-export function CompanyForm({ company }: { company: Company }) {
+export function CompanyForm({
+  company,
+  firstPeriods,
+}: {
+  company: Company;
+  firstPeriods: Array<{ value: string; label: string }>;
+}) {
   const toast = useToast();
   const [state, action, pending] = useActionState<FormState, FormData>(async (prev, form) => {
     const r = await updateCompanyAction(prev, form);
@@ -59,6 +65,15 @@ export function CompanyForm({ company }: { company: Company }) {
           label={s.address}
           defaultValue={company.address}
           autoComplete="street-address"
+        />
+        <Select
+          name="firstPeriod"
+          label={t.manage.users.firstPeriod}
+          hint={t.manage.onboarding.firstPeriodHint}
+          defaultValue={company.firstPeriod}
+          options={firstPeriods}
+          error={errors.firstPeriod}
+          fieldClassName="md:col-span-2"
         />
         <div className="md:col-span-2">
           <Button type="submit" loading={pending}>

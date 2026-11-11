@@ -12,6 +12,8 @@ import { supportedYears } from "@/lib/payroll";
 import { requireSession } from "@/lib/session";
 import { PageSkeleton } from "../_components/PageSkeleton";
 import { AbsenceStatusBadge } from "../_components/StatusBadges";
+import { ConfirmlessButton } from "../_components/ConfirmlessButton";
+import { deleteAbsenceAction } from "./actions";
 import { CalendarLegend, MonthCalendar } from "./MonthCalendar";
 import { MarkAbsence } from "./MarkAbsence";
 import { RequestActions } from "./RequestActions";
@@ -41,12 +43,12 @@ function MonthLink({ period, dir }: { period: string; dir: -1 | 1 }) {
 }
 
 async function TimesheetView({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
-  const session = await requireSession(["accountant", "owner"]);
+  await requireSession(["accountant", "owner"]);
   const { month } = await searchParams;
   const period = isSupportedPeriod(month, supportedYears()) ? month : currentPeriod();
   const [sheet, employees, pending] = await Promise.all([
     api.timesheet.get(period),
-    api.employees.list(),
+    api.employees.list({ withDismissed: true }),
     api.timesheet.absences({ status: "pending" }),
   ]);
   const names = Object.fromEntries(employees.map((e) => [e.id, e.shortName]));
@@ -66,12 +68,12 @@ async function TimesheetView({ searchParams }: { searchParams: Promise<{ month?:
         title={ts.title}
         meta={interpolate(ts.meta, { norm: formatCount(sheet.normDays, t.plural.days) })}
         actions={
-          session.role === "accountant" && (
-            <MarkAbsence
-              employees={employees.map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}` }))}
-              defaultDate={period === currentPeriod() ? today() : `${period}-01`}
-            />
-          )
+          <MarkAbsence
+            employees={employees
+              .filter((e) => e.status !== "dismissed")
+              .map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}` }))}
+            defaultDate={period === currentPeriod() ? today() : `${period}-01`}
+          />
         }
       />
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -180,7 +182,20 @@ async function TimesheetView({ searchParams }: { searchParams: Promise<{ month?:
                         <span>
                           {t.domain.absenceTypes[a.type]} · {formatPeriod(a.from, a.to)}
                         </span>
-                        <AbsenceStatusBadge status={a.status} />
+                        <span className="flex items-center gap-1">
+                          <AbsenceStatusBadge status={a.status} />
+                          <ConfirmlessButton
+                            variant="ghost"
+                            action={deleteAbsenceAction.bind(null, a.id)}
+                            done={t.manage.timesheet.removed}
+                            label={interpolate(t.manage.timesheet.removeLabel, {
+                              name: x.name,
+                              period: formatPeriod(a.from, a.to),
+                            })}
+                          >
+                            {t.manage.timesheet.remove}
+                          </ConfirmlessButton>
+                        </span>
                       </div>
                     ))}
                   </li>

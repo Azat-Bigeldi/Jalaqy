@@ -26,7 +26,7 @@ export async function createAbsenceAction(
   _prev: AbsenceFormState,
   form: FormData,
 ): Promise<AbsenceFormState> {
-  await requireSession(["accountant"]);
+  await requireSession(["accountant", "owner"]);
   try {
     await api.timesheet.createAbsence({
       employeeId: str(form, "employeeId"),
@@ -35,6 +35,17 @@ export async function createAbsenceAction(
       to: str(form, "to"),
       comment: str(form, "comment") || undefined,
     });
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (e) {
+    return toActionError(e);
+  }
+}
+
+export async function deleteAbsenceAction(id: string): Promise<ActionResult> {
+  await requireSession(["accountant", "owner"]);
+  try {
+    await api.timesheet.deleteAbsence(id);
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (e) {

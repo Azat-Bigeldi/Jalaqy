@@ -50,7 +50,7 @@ function NavLink({
       <span className="shrink-0" aria-hidden="true">
         {item.icon}
       </span>
-      {item.label}
+      <span className="min-w-0 truncate">{item.label}</span>
     </Link>
   );
 }

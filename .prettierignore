@@ -6,3 +6,5 @@ test-results/
 playwright-report/
 docs/screens/
 package-lock.json
+.next-landing/
+.backup/

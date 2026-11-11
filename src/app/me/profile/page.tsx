@@ -5,6 +5,8 @@ import { MobileContent } from "@/components/mobile/MobileShell";
 import { Avatar, Button, Card, Skeleton } from "@/components/ui";
 import { IconLogout } from "@/components/ui/icons";
 import { t } from "@/i18n";
+import { PasswordForm } from "@/components/account/AccountForms";
+import { getAccount } from "@/lib/account";
 import { api } from "@/lib/api";
 import { formatCount, formatDate } from "@/lib/format";
 import { formatKzPhone, normalizeKzPhone } from "@/lib/validation/contact";
@@ -17,9 +19,10 @@ export const metadata: Metadata = { title: p.title };
 
 async function Profile() {
   const session = await requireEmployee();
-  const [employee, company] = await Promise.all([
+  const [employee, company, account] = await Promise.all([
     api.employees.get(session.employeeId),
     api.company.get(),
+    getAccount(session),
   ]);
   const phone = normalizeKzPhone(employee.phone);
   const rows: Array<[string, string]> = [
@@ -27,7 +30,9 @@ async function Profile() {
     [p.position, employee.position],
     [p.hired, formatDate(employee.hireDate)],
     [p.iin, maskIin(employee.iin)],
-    [p.phone, phone ? formatKzPhone(phone) : employee.phone],
+    ...(employee.phone
+      ? ([[p.phone, phone ? formatKzPhone(phone) : employee.phone]] as Array<[string, string]>)
+      : []),
     [p.deduction, employee.hasDeduction ? p.deductionYes : p.deductionNo],
     [p.vacation, formatCount(employee.vacationDaysLeft, t.plural.days)],
   ];
@@ -55,6 +60,7 @@ async function Profile() {
           ))}
         </dl>
       </Card>
+      {account.contact && <PasswordForm contact={account.contact} />}
       <form action={logoutAction}>
         <Button
           type="submit"

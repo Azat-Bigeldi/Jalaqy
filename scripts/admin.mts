@@ -14,12 +14,16 @@
  *   npm run admin -- list
  *       Компании и пользователи.
  *
+ *   npm run admin -- backup
+ *       Сохранить все компании и пользователей в .backup/<время>.json (в git не попадает).
+ *
  *   npm run admin -- wipe --yes
  *       Стереть ВСЕ компании, пользователей и служебные записи входа. Необратимо.
  */
 import { cert, initializeApp } from "firebase-admin/app";
 import { getFirestore, type DocumentReference } from "firebase-admin/firestore";
 import { randomBytes } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { emptyCompany } from "../src/lib/api/mock/seed";
 import { hashPassword, isPasswordOk, PASSWORD_MIN } from "../src/lib/password";
@@ -180,6 +184,30 @@ if (command === "company") {
     (u) => !companies.docs.some((c) => c.id === u.data().companyId),
   );
   for (const u of orphans) console.log(`! пользователь без компании: users/${u.id}`);
+} else if (command === "backup") {
+  /** Документ вместе со вложенными коллекциями. */
+  const dump = async (ref: DocumentReference): Promise<Record<string, unknown>> => {
+    const out: Record<string, unknown> = { data: (await ref.get()).data() ?? null };
+    for (const sub of await ref.listCollections()) {
+      const docs: Record<string, unknown> = {};
+      for (const doc of await sub.listDocuments()) docs[doc.id] = await dump(doc);
+      out[sub.id] = docs;
+    }
+    return out;
+  };
+  const result: Record<string, Record<string, unknown>> = {};
+  for (const name of ["companies", "users"]) {
+    result[name] = {};
+    for (const doc of await db.collection(name).listDocuments()) {
+      result[name][doc.id] = await dump(doc);
+    }
+  }
+  mkdirSync(".backup", { recursive: true });
+  const file = `.backup/${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  writeFileSync(file, JSON.stringify(result, null, 2));
+  console.log(
+    `✓ ${file}: компаний ${Object.keys(result.companies ?? {}).length}, пользователей ${Object.keys(result.users ?? {}).length}`,
+  );
 } else if (command === "wipe") {
   if (!values.yes) fail("Это сотрёт ВСЕ данные в Firestore. Повторите с --yes");
   for (const name of ["companies", "users", "loginAttempts", "loginCodes"]) {
@@ -189,6 +217,6 @@ if (command === "company") {
   }
 } else {
   fail(
-    "Команда: company | user | password | list | wipe (подробности — в начале scripts/admin.mts)",
+    "Команда: company | user | password | list | backup | wipe (подробности — в начале scripts/admin.mts)",
   );
 }

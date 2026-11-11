@@ -19,8 +19,10 @@ import { IconPlus } from "@/components/ui/icons";
 import { interpolate, t } from "@/i18n";
 import type { CompanyUser, Role, StaffRole } from "@/lib/api/contracts";
 import { formatKzPhone, normalizeKzPhone } from "@/lib/validation/contact";
+import { ConfirmAction } from "../_components/ConfirmAction";
 import {
   inviteUserAction,
+  removeUserAction,
   setUserPasswordAction,
   setUserRoleAction,
   type FormState,
@@ -41,10 +43,11 @@ export interface EmployeeOption {
   name: string;
 }
 
-function RoleSelect({ user }: { user: CompanyUser }) {
+function RoleSelect({ user, self }: { user: CompanyUser; self: boolean }) {
   const [pending, startTransition] = useTransition();
   const toast = useToast();
-  if (user.role === "employee") return <span>{t.domain.roles.employee}</span>;
+  // сотрудник остаётся сотрудником, свою роль не меняем — чтобы не потерять доступ
+  if (user.role === "employee" || self) return <span>{t.domain.roles[user.role]}</span>;
   return (
     <Select
       label={interpolate(u.roleLabel, { name: user.name })}
@@ -128,7 +131,9 @@ function PasswordSheet({ user, onClose }: { user: CompanyUser | null; onClose: (
 export function UsersSection({
   users,
   employees,
+  currentUserId,
 }: {
+  currentUserId: string;
   users: CompanyUser[];
   employees: EmployeeOption[];
 }) {
@@ -157,10 +162,21 @@ export function UsersSection({
     {
       key: "name",
       header: u.name,
-      render: (x) => <span className="font-semibold">{x.name}</span>,
+      render: (x) => (
+        <span className="font-semibold">
+          {x.name}
+          {x.id === currentUserId && (
+            <span className="font-normal text-muted"> · {t.manage.users.you}</span>
+          )}
+        </span>
+      ),
     },
     { key: "contact", header: u.contact, render: (x) => shownContact(x.contact) },
-    { key: "role", header: u.role, render: (x) => <RoleSelect user={x} /> },
+    {
+      key: "role",
+      header: u.role,
+      render: (x) => <RoleSelect user={x} self={x.id === currentUserId} />,
+    },
     {
       key: "status",
       header: u.status,
@@ -175,14 +191,31 @@ export function UsersSection({
       key: "actions",
       header: u.actions,
       render: (x) => (
-        <Button
-          variant="ghost"
-          size="md"
-          aria-label={interpolate(u.changePasswordFor, { name: x.name })}
-          onClick={() => setPasswordFor(x)}
-        >
-          {u.changePassword}
-        </Button>
+        <span className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="md"
+            aria-label={interpolate(u.changePasswordFor, { name: x.name })}
+            onClick={() => setPasswordFor(x)}
+          >
+            {u.changePassword}
+          </Button>
+          {x.id !== currentUserId && (
+            <ConfirmAction
+              variant="ghost"
+              size="md"
+              danger
+              title={t.manage.users.removeTitle}
+              text={interpolate(t.manage.users.removeText, { name: x.name })}
+              confirmLabel={t.manage.users.remove}
+              done={t.manage.users.removed}
+              action={removeUserAction.bind(null, x.id)}
+              aria-label={interpolate(t.manage.users.removeFor, { name: x.name })}
+            >
+              {t.manage.users.remove}
+            </ConfirmAction>
+          )}
+        </span>
       ),
     },
   ];
@@ -205,7 +238,7 @@ export function UsersSection({
         columns={columns}
         rows={users}
         rowKey={(x) => x.id}
-        minWidth={820}
+        minWidth={920}
         className="px-0"
       />
       <Sheet

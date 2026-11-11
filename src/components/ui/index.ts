@@ -2,7 +2,7 @@ export { Avatar, initials } from "./Avatar";
 export { Badge, StatusPill, type Status } from "./Badge";
 export { Banner } from "./Banner";
 export { BottomTabBar } from "./BottomTabBar";
-export { Button, ButtonLink, buttonClasses } from "./Button";
+export { Button, ButtonLink, buttonClasses, type ButtonProps } from "./Button";
 export { Card, CardEyebrow } from "./Card";
 export { Checkbox, Radio, RadioGroup, Switch } from "./Choice";
 export { Dialog, Modal, Sheet } from "./Dialog";

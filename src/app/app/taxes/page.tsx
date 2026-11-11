@@ -19,13 +19,17 @@ import { api } from "@/lib/api";
 import type { TaxPayment, TaxReport } from "@/lib/api/contracts";
 import { currentPeriod, daysUntil } from "@/lib/clock";
 import { formatCount, formatDate, formatNumber, monthName } from "@/lib/format";
-import { isSupportedPeriod, parsePeriod } from "@/lib/period";
+import { isSupportedPeriod, parsePeriod, shiftPeriod } from "@/lib/period";
 import { supportedYears } from "@/lib/payroll";
 import { requireSession } from "@/lib/session";
 import { PageSkeleton } from "../_components/PageSkeleton";
+import { ConfirmlessButton } from "../_components/ConfirmlessButton";
+import { MonthLink } from "../_components/MonthLink";
+import { setReportSubmittedAction } from "./actions";
 import { MarkPaidButton } from "./MarkPaidButton";
 
 const tx = t.taxes;
+const mt = t.manage.taxes;
 
 export const metadata: Metadata = { title: tx.title };
 
@@ -42,9 +46,20 @@ function reportBadge(r: TaxReport) {
 }
 
 async function TaxesView({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
-  const session = await requireSession(["accountant", "owner"]);
+  await requireSession(["accountant", "owner"]);
   const sp = await searchParams;
   const period = isSupportedPeriod(sp.period, supportedYears()) ? sp.period : currentPeriod();
+  const monthNav = (
+    <div className="flex items-center gap-1.5">
+      <MonthLink
+        period={period}
+        dir={-1}
+        path="/app/taxes"
+        disabled={!isSupportedPeriod(shiftPeriod(period, -1), supportedYears())}
+      />
+      <MonthLink period={period} dir={1} path="/app/taxes" disabled={period >= currentPeriod()} />
+    </div>
+  );
   const [payments, reports] = await Promise.all([api.taxes.payments(period), api.taxes.reports()]);
   const { monthIndex, year } = parsePeriod(period);
   const month = monthName(monthIndex);
@@ -112,7 +127,7 @@ async function TaxesView({ searchParams }: { searchParams: Promise<{ period?: st
               <IconDownload size={18} />
               {tx.order}
             </a>
-            {p.status === "unpaid" && session.role === "accountant" && (
+            {p.status === "unpaid" && (
               <MarkPaidButton id={p.id} label={interpolate(tx.markPaidLabel, { name: short })} />
             )}
           </span>
@@ -124,7 +139,11 @@ async function TaxesView({ searchParams }: { searchParams: Promise<{ period?: st
   if (total === 0) {
     return (
       <>
-        <PageHeader title={tx.title} meta={interpolate(tx.meta, { month: `${month} ${year}` })} />
+        <PageHeader
+          title={tx.title}
+          meta={interpolate(tx.meta, { month: `${month} ${year}` })}
+          actions={monthNav}
+        />
         <EmptyState
           icon={<IconChart size={26} />}
           title={interpolate(tx.empty.title, { month })}
@@ -138,7 +157,11 @@ async function TaxesView({ searchParams }: { searchParams: Promise<{ period?: st
 
   return (
     <>
-      <PageHeader title={tx.title} meta={interpolate(tx.meta, { month: `${month} ${year}` })} />
+      <PageHeader
+        title={tx.title}
+        meta={interpolate(tx.meta, { month: `${month} ${year}` })}
+        actions={monthNav}
+      />
       {unpaid > 0 ? (
         <Banner
           tone="warning"
@@ -187,7 +210,22 @@ async function TaxesView({ searchParams }: { searchParams: Promise<{ period?: st
                   {interpolate(tx.reportDue, { date: formatDate(r.dueDate) })}
                 </span>
               </div>
-              {reportBadge(r)}
+              <span className="flex flex-wrap items-center gap-2">
+                {reportBadge(r)}
+                {r.status !== "not_ready" && (
+                  <ConfirmlessButton
+                    variant="ghost"
+                    action={setReportSubmittedAction.bind(null, r.id, r.status !== "submitted")}
+                    done={mt.reportToggled}
+                    label={interpolate(mt.reportLabel, {
+                      action: r.status === "submitted" ? mt.unsubmit : mt.submit,
+                      quarter: quarterLabel(r.quarter),
+                    })}
+                  >
+                    {r.status === "submitted" ? mt.unsubmit : mt.submit}
+                  </ConfirmlessButton>
+                )}
+              </span>
             </Card>
           ))}
         </ul>

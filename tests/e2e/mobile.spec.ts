@@ -25,7 +25,11 @@ test.describe("владелец", () => {
   test("владелец выходит из аккаунта", async ({ page, context, baseURL }) => {
     await loginAs(context, baseURL!, "owner");
     await page.goto("/owner");
-    await page.getByRole("button", { name: "Выйти" }).click();
+    // выход — в профиле: туда ведёт аватар в шапке
+    await page.getByRole("link", { name: "Профиль" }).click();
+    await expect(page).toHaveURL(/\/owner\/profile$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Профиль" })).toBeVisible();
+    await page.getByRole("button", { name: "Выйти из аккаунта" }).click();
     await expect(page).toHaveURL(/\/login$/);
     await page.goto("/owner");
     await expect(page).toHaveURL(/\/login\?next=%2Fowner/);

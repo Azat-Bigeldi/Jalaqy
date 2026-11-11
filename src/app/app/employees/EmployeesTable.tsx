@@ -24,7 +24,17 @@ const columns: TableColumn<Employee>[] = [
           >
             {emp.firstName} {emp.lastName}
           </Link>
-          <span className="text-caption text-muted">{emp.position}</span>
+          <span className="text-caption text-muted">
+            {emp.position}
+            {emp.status === "dismissed" && emp.dismissDate && (
+              <>
+                {" · "}
+                {interpolate(t.manage.employees.dismissedMeta, {
+                  date: formatDate(emp.dismissDate, "numeric"),
+                })}
+              </>
+            )}
+          </span>
         </span>
       </span>
     ),
@@ -45,7 +55,9 @@ const columns: TableColumn<Employee>[] = [
     key: "deduction",
     header: e.table.deduction,
     render: (emp) =>
-      emp.hasDeduction ? (
+      emp.status === "dismissed" ? (
+        <Badge tone="danger">{t.manage.employees.dismissedBadge}</Badge>
+      ) : emp.hasDeduction ? (
         <Badge tone="success">{e.table.yes}</Badge>
       ) : (
         <Badge tone="neutral">{e.table.no}</Badge>

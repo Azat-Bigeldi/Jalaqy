@@ -44,7 +44,7 @@ function employee(
 }
 
 export interface MockDb {
-  company: Company;
+  company: Omit<Company, "firstPeriod">;
   /** С какого месяца компания ведёт расчёт в Jalaqy (история листков — отсюда) */
   firstPeriod: Period;
   users: CompanyUser[];

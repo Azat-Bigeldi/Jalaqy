@@ -1,8 +1,8 @@
 import { interpolate, t } from "@/i18n";
 import { formatDate } from "@/lib/format/date";
 import { formatTenge } from "@/lib/format/tenge";
-import { parsePeriod, periodEnd, quarterOf } from "@/lib/period";
-import { workingDays } from "@/lib/payroll";
+import { isSupportedPeriod, parsePeriod, periodEnd, quarterOf } from "@/lib/period";
+import { supportedYears, workingDays } from "@/lib/payroll";
 import { parseLoginContact } from "@/lib/validation/contact";
 import {
   hasErrors,
@@ -159,6 +159,46 @@ function csv(rows: Array<Array<string | number>>): string {
   return "﻿" + rows.map((r) => r.map(cell).join(";")).join("\r\n");
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const conflict = (message: string = t.ui.conflict): never => {
+  throw new ApiError({ code: "conflict", message }, 409);
+};
+
+/** Месяц, с которого считаем: не позже текущего и только для лет со ставками. */
+function checkFirstPeriod(value: string | undefined): void {
+  if (value === undefined) return;
+  if (!isSupportedPeriod(value, supportedYears()) || value > currentPeriod()) {
+    validation({ firstPeriod: v.firstPeriod });
+  }
+}
+
+/** Есть ли подтверждённая выплата за месяц, в котором сотрудник работал. */
+function hasConfirmedPay(employee: Employee): boolean {
+  const db = getDb();
+  return Object.entries(db.payrollStatus).some(
+    ([period, status]) =>
+      (status === "approved" || status === "paid" || status === "closed") &&
+      isEmployedIn(employee, period),
+  );
+}
+
+/** Месяц закрыт, когда зарплата выплачена и все налоги отмечены оплаченными. */
+function closeIfDone(period: Period): void {
+  const db = getDb();
+  if (
+    db.payrollStatus[period] === "paid" &&
+    taxPayments(period).every((p) => p.status === "paid")
+  ) {
+    db.payrollStatus[period] = "closed";
+  }
+}
+
+const withFirstPeriod = () => {
+  const db = getDb();
+  return clone({ ...db.company, firstPeriod: db.firstPeriod });
+};
+
 const baseApi: JalaqyApi = {
   auth: {
     async login({ contact, password, demoRole = "accountant" }) {
@@ -185,30 +225,62 @@ const baseApi: JalaqyApi = {
           : { userId: user!.id, role: demoRole, name: user!.name, companyId: db.company.id };
       return session;
     },
+    async register() {
+      await latency();
+      // в демо компания одна; настоящая регистрация — в реализации на базе
+      return conflict(v.registerDemo);
+    },
+  },
+
+  account: {
+    async get(userId) {
+      await latency();
+      return clone(getDb().users.find((u) => u.id === userId) ?? notFound());
+    },
+    async update(userId, patch) {
+      await latency();
+      const user = getDb().users.find((u) => u.id === userId) ?? notFound();
+      if (!patch.name.trim()) validation({ name: v.name });
+      // имя сотрудника берётся из его карточки
+      if (user.role !== "employee") user.name = patch.name.trim();
+      return clone(user);
+    },
+    async changePassword(userId, _current, next) {
+      await latency();
+      if (!getDb().users.some((u) => u.id === userId)) notFound();
+      // текущий пароль сверяет реализация с базой: в моке паролей нет
+      if (!isPasswordOk(next)) validation({ next: v.password });
+    },
   },
 
   company: {
     async get() {
       await latency();
-      return clone(getDb().company);
+      return withFirstPeriod();
     },
     async update(patch) {
       await latency();
       const errors = validateCompany(patch);
       if (hasErrors(errors)) validation(errors);
+      checkFirstPeriod(patch.firstPeriod);
       const db = getDb();
-      db.company = { ...db.company, ...patch };
-      return clone(db.company);
+      const { firstPeriod, ...rest } = patch;
+      db.company = { ...db.company, ...rest };
+      if (firstPeriod) db.firstPeriod = firstPeriod;
+      return withFirstPeriod();
     },
     async onboard(input) {
       await latency();
       const errors = validateCompany(input.company);
       if (hasErrors(errors)) validation(errors);
+      checkFirstPeriod(input.company.firstPeriod);
       const created = input.employees.map(makeEmployee);
       const db = getDb();
-      db.company = { ...db.company, ...input.company, onboarded: true };
+      const { firstPeriod, ...company } = input.company;
+      db.company = { ...db.company, ...company, onboarded: true };
+      if (firstPeriod) db.firstPeriod = firstPeriod;
       db.employees.push(...created);
-      return clone(db.company);
+      return withFirstPeriod();
     },
     async users() {
       await latency();
@@ -235,12 +307,19 @@ const baseApi: JalaqyApi = {
       if (!getDb().users.some((u) => u.id === userId)) notFound();
       if (!isPasswordOk(password)) validation({ password: v.password });
     },
+    async removeUser(userId, actorId) {
+      await latency();
+      const db = getDb();
+      if (!db.users.some((u) => u.id === userId)) notFound();
+      if (userId === actorId) conflict(v.removeSelf);
+      db.users = db.users.filter((u) => u.id !== userId);
+    },
   },
 
   employees: {
-    async list() {
+    async list(opts = {}) {
       await latency();
-      return clone(getDb().employees.filter((e) => e.status !== "dismissed"));
+      return clone(getDb().employees.filter((e) => opts.withDismissed || e.status !== "dismissed"));
     },
     async get(id) {
       await latency();
@@ -255,15 +334,50 @@ const baseApi: JalaqyApi = {
     async update(id, patch) {
       await latency();
       const e = findEmployee(id);
-      const errors = validateEmployeeInput({
+      const errors: Record<string, string | undefined> = validateEmployeeInput({
         ...e,
+        firstName: patch.firstName ?? e.firstName,
+        lastName: patch.lastName ?? e.lastName,
+        iin: patch.iin ?? e.iin,
+        hireDate: patch.hireDate ?? e.hireDate,
         position: patch.position ?? e.position,
         salary: patch.salary ?? e.salary,
         phone: patch.phone ?? e.phone,
       });
+      if (
+        patch.vacationDaysLeft !== undefined &&
+        !(
+          Number.isInteger(patch.vacationDaysLeft) &&
+          patch.vacationDaysLeft >= 0 &&
+          patch.vacationDaysLeft <= 365
+        )
+      ) {
+        errors.vacationDaysLeft = v.vacationDays;
+      }
+      if (patch.hireDate && e.dismissDate && patch.hireDate > e.dismissDate) {
+        errors.hireDate = v.dateOrder;
+      }
       if (hasErrors(errors)) validation(errors);
+      if (patch.firstName !== undefined) e.firstName = patch.firstName.trim();
+      if (patch.lastName !== undefined) e.lastName = patch.lastName.trim();
+      e.shortName = `${e.firstName} ${e.lastName.charAt(0)}.`;
+      if (patch.iin !== undefined) e.iin = patch.iin;
+      if (patch.vacationDaysLeft !== undefined) e.vacationDaysLeft = patch.vacationDaysLeft;
+      if (patch.hireDate !== undefined && patch.hireDate !== e.hireDate) {
+        e.hireDate = patch.hireDate;
+        // оклад действует с даты приёма: первая запись истории не позже неё
+        const first = e.salaryHistory[0];
+        if (first && first.from > patch.hireDate) first.from = patch.hireDate;
+        if (e.salaryHistory.length === 1 && first) first.from = patch.hireDate;
+        // имя входа сотрудника — из карточки
+      }
+      for (const u of getDb().users) {
+        if (u.employeeId === e.id) u.name = `${e.firstName} ${e.lastName}`;
+      }
       if (patch.salary !== undefined && patch.salary !== e.salary) {
-        const from = patch.salaryFrom ?? `${currentPeriod()}-01`;
+        // принят в этом месяце — оклад меняется с даты приёма (исправление опечатки)
+        const monthStart = `${currentPeriod()}-01`;
+        const from = patch.salaryFrom ?? (e.hireDate > monthStart ? e.hireDate : monthStart);
         e.salaryHistory = [
           ...e.salaryHistory.filter((h) => h.from < from),
           { from, salary: patch.salary },
@@ -282,6 +396,43 @@ const baseApi: JalaqyApi = {
     payslip: self.payslip,
     certificates: self.certificates,
     requestCertificate: self.requestCertificate,
+    async dismiss(id, date) {
+      await latency();
+      const e = findEmployee(id);
+      if (!ISO_DATE.test(date)) validation({ date: v.date });
+      if (date < e.hireDate) validation({ date: v.dismissBeforeHire });
+      e.status = "dismissed";
+      e.dismissDate = date;
+      return clone(e);
+    },
+    async restore(id) {
+      await latency();
+      const e = findEmployee(id);
+      e.status = "active";
+      delete e.dismissDate;
+      return clone(e);
+    },
+    async remove(id) {
+      await latency();
+      const e = findEmployee(id);
+      if (hasConfirmedPay(e)) conflict(v.removeHasPay);
+      const db = getDb();
+      db.employees = db.employees.filter((x) => x.id !== id);
+      db.absences = db.absences.filter((a) => a.employeeId !== id);
+      db.certificates = db.certificates.filter((c) => c.employeeId !== id);
+      db.contracts = db.contracts.filter((c) => c.employeeId !== id);
+      db.users = db.users.filter((u) => u.employeeId !== id);
+    },
+    async certificateRequests() {
+      await latency();
+      return clone(getDb().certificates.filter((c) => c.status === "requested"));
+    },
+    async markCertificateReady(certificateId) {
+      await latency();
+      const cert = getDb().certificates.find((c) => c.id === certificateId) ?? notFound();
+      cert.status = "ready";
+      return clone(cert);
+    },
   },
 
   payroll: {
@@ -309,6 +460,25 @@ const baseApi: JalaqyApi = {
       }
       db.payrollStatus[period] = "approved";
       db.payrollTimestamps[period] = { ...db.payrollTimestamps[period], approvedAt: now() };
+      return buildPayrollRun(db, period);
+    },
+    async markPaid(period) {
+      await latency();
+      const db = getDb();
+      if (buildPayrollRun(db, period).status !== "approved") conflict();
+      db.payrollStatus[period] = "paid";
+      db.payrollTimestamps[period] = { ...db.payrollTimestamps[period], paidAt: now() };
+      closeIfDone(period);
+      return buildPayrollRun(db, period);
+    },
+    async reopen(period) {
+      await latency();
+      const db = getDb();
+      const { status } = buildPayrollRun(db, period);
+      if (status !== "awaiting_approval" && status !== "approved") conflict();
+      // без сохранённого статуса месяц снова «расчёт готов» (см. statusOf)
+      delete db.payrollStatus[period];
+      delete db.payrollTimestamps[period];
       return buildPayrollRun(db, period);
     },
     async export1c(period) {
@@ -410,9 +580,20 @@ const baseApi: JalaqyApi = {
           });
         }
         employee.vacationDaysLeft -= days;
+        absence.daysDeducted = days;
       }
       absence.status = decision;
       return clone(absence);
+    },
+    async deleteAbsence(id) {
+      await latency();
+      const db = getDb();
+      const absence = db.absences.find((a) => a.id === id) ?? notFound();
+      if (absence.daysDeducted) {
+        const employee = db.employees.find((e) => e.id === absence.employeeId);
+        if (employee) employee.vacationDaysLeft += absence.daysDeducted;
+      }
+      db.absences = db.absences.filter((a) => a.id !== id);
     },
   },
 
@@ -428,12 +609,7 @@ const baseApi: JalaqyApi = {
       const payment = taxPayments(period).find((p) => p.kind === kind) ?? notFound();
       const db = getDb();
       db.paidTaxes[id] = now();
-      if (
-        taxPayments(period).every((p) => p.status === "paid") &&
-        db.payrollStatus[period] === "paid"
-      ) {
-        db.payrollStatus[period] = "closed";
-      }
+      closeIfDone(period);
       return { ...payment, status: "paid", paidAt: db.paidTaxes[id] };
     },
     async paymentOrder(id) {
@@ -457,6 +633,19 @@ const baseApi: JalaqyApi = {
     async reports() {
       await latency();
       return reportsFor(clone(getDb().reports));
+    },
+    async setReportSubmitted(id, submitted) {
+      await latency();
+      const db = getDb();
+      const report = reportsFor(clone(db.reports)).find((r) => r.id === id) ?? notFound();
+      db.reports = db.reports.filter((r) => r.id !== id);
+      if (submitted) {
+        const saved = { ...report, status: "submitted" as const };
+        db.reports.push(saved);
+        return saved;
+      }
+      // без сохранённой записи статус снова считается по календарю
+      return reportsFor(clone(db.reports)).find((r) => r.id === id) ?? report;
     },
   },
 

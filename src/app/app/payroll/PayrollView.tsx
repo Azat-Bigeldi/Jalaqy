@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
   Banner,
   buttonClasses,
@@ -27,6 +26,10 @@ import {
 import { isSupportedPeriod, parsePeriod } from "@/lib/period";
 import { supportedYears } from "@/lib/payroll";
 import { requireSession } from "@/lib/session";
+import { ConfirmAction } from "../_components/ConfirmAction";
+import { MonthLink } from "../_components/MonthLink";
+import { PayrollStatusBadge } from "../_components/StatusBadges";
+import { approvePayrollInPanelAction, markPayrollPaidAction, reopenPayrollAction } from "./actions";
 import { SubmitButton } from "./SubmitButton";
 
 const p = t.app.payroll;
@@ -49,14 +52,31 @@ export async function PayrollView({
 }) {
   const session = await requireSession(["accountant", "owner"]);
   const sp = await searchParams;
-  const period = isSupportedPeriod(sp.period, supportedYears()) ? sp.period : currentPeriod();
-  const [run, employees, company] = await Promise.all([
+  const company = await api.company.get();
+  const now = currentPeriod();
+  // расчёт есть только с месяца начала работы в Jalaqy и до текущего
+  const period =
+    isSupportedPeriod(sp.period, supportedYears()) &&
+    sp.period >= company.firstPeriod &&
+    sp.period <= now
+      ? sp.period
+      : now;
+  const [run, employees] = await Promise.all([
     api.payroll.get(period),
-    api.employees.list(),
-    api.company.get(),
+    api.employees.list({ withDismissed: true }),
   ]);
-  // Новая компания: сначала реквизиты и сотрудники
-  if (!company.onboarded && session.role === "accountant") redirect("/onboarding");
+  const isOwner = session.role === "owner";
+  const m = t.manage.payroll;
+  const money = {
+    net: formatTenge(run.totals.net),
+    budget: formatTenge(run.totals.toBudget),
+  };
+  const monthNav = (
+    <div className="flex items-center gap-1.5">
+      <MonthLink period={period} dir={-1} disabled={period <= company.firstPeriod} />
+      <MonthLink period={period} dir={1} disabled={period >= now} />
+    </div>
+  );
   const { year, monthIndex } = parsePeriod(period);
   const month = `${monthName(monthIndex)} ${year}`;
   const totals = run.totals;
@@ -78,19 +98,44 @@ export async function PayrollView({
             >
               {p.export1c}
             </a>
-            {session.role === "accountant" && (
+            {(run.status === "awaiting_approval" || run.status === "approved") && (
+              <ConfirmAction
+                variant="secondary"
+                title={m.reopenTitle}
+                text={m.reopenText}
+                done={m.reopened}
+                action={reopenPayrollAction.bind(null, period)}
+              >
+                {m.reopen}
+              </ConfirmAction>
+            )}
+            {!isOwner && (run.status === "calculated" || run.status === "awaiting_approval") && (
               <SubmitButton
                 period={period}
-                net={formatTenge(totals.net)}
-                budget={formatTenge(totals.toBudget)}
-                state={
-                  run.status === "calculated"
-                    ? "ready"
-                    : run.status === "draft"
-                      ? "unavailable"
-                      : "submitted"
-                }
+                net={money.net}
+                budget={money.budget}
+                state={run.status === "calculated" ? "ready" : "submitted"}
               />
+            )}
+            {isOwner && (run.status === "calculated" || run.status === "awaiting_approval") && (
+              <ConfirmAction
+                title={m.approveTitle}
+                text={interpolate(m.approveText, money)}
+                done={m.approved}
+                action={approvePayrollInPanelAction.bind(null, period)}
+              >
+                {m.approve}
+              </ConfirmAction>
+            )}
+            {run.status === "approved" && (
+              <ConfirmAction
+                title={m.markPaidTitle}
+                text={interpolate(m.markPaidText, money)}
+                done={m.paid}
+                action={markPayrollPaidAction.bind(null, period)}
+              >
+                {m.markPaid}
+              </ConfirmAction>
             )}
           </>
         )
@@ -102,6 +147,7 @@ export async function PayrollView({
     return (
       <>
         {header}
+        {monthNav}
         <EmptyState
           icon={<IconUsers size={26} />}
           title={p.empty.title}
@@ -117,8 +163,12 @@ export async function PayrollView({
     run.status === "awaiting_approval"
       ? p.banner.awaiting
       : run.status === "approved"
-        ? p.banner.approved
-        : p.banner.calculated;
+        ? isOwner
+          ? m.bannerApprovedSelf
+          : p.banner.approved
+        : run.status === "paid"
+          ? m.bannerPaid
+          : p.banner.calculated;
 
   const columns: TableColumn<PayrollLine>[] = [
     {
@@ -191,6 +241,13 @@ export async function PayrollView({
   return (
     <>
       {header}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {monthNav}
+        <span className="flex items-center gap-2 text-sm text-muted">
+          {m.statusLabel}
+          <PayrollStatusBadge status={run.status} paidAt={run.paidAt} />
+        </span>
+      </div>
       <Stepper steps={[...p.steps]} current={STEP[run.status]} />
       <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
         <KpiTile tone="ink" label={p.kpi.toPay} value={totals.net} />
@@ -204,7 +261,7 @@ export async function PayrollView({
         />
         <KpiTile label={p.kpi.cost} value={totals.cost} />
       </div>
-      {run.status !== "closed" && run.status !== "paid" && (
+      {run.status !== "closed" && (
         <Banner
           tone="warning"
           title={interpolate(p.banner.title, {

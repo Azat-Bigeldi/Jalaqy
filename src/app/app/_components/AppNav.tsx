@@ -1,5 +1,6 @@
 import { MobileNavBar, Sidebar } from "@/components/ui";
-import { IconLogout } from "@/components/ui/icons";
+import { redirect } from "next/navigation";
+import { IconLogout, IconUser } from "@/components/ui/icons";
 import { logoutAction } from "@/app/(auth)/actions";
 import { t } from "@/i18n";
 import { api } from "@/lib/api";
@@ -22,11 +23,16 @@ function LogoutButton() {
 
 /** Сайдбар (≥1024px) и шапка с выезжающим меню (<1024px). */
 export async function AppNav() {
-  await requireSession(["accountant", "owner"]);
+  const session = await requireSession(["accountant", "owner"]);
   const company = await api.company.get();
+  // Новая компания: сначала реквизиты и сотрудники
+  if (!company.onboarded) redirect("/onboarding");
   const props = {
     items: appNav,
-    footerItems: appNavFooter,
+    footerItems: [
+      ...appNavFooter,
+      { href: "/app/profile", label: session.name, icon: <IconUser size={18} /> },
+    ],
     companyLabel: t.app.shell.companyLabel,
     companyName: company.name,
     footer: <LogoutButton />,
