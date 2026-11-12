@@ -22,6 +22,10 @@ export const core = {
     formErrors: "Проверьте поля формы",
     conflict: "Данные уже изменились. Обновите страницу",
     genericError: "Что-то пошло не так. Попробуйте ещё раз",
+    notConfigured: "Сервис не настроен: база данных не подключена",
+    notConfiguredTitle: "База данных не подключена",
+    notConfiguredText:
+      "Войти и зарегистрироваться пока нельзя. Администратору: задайте на хостинге FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY и SESSION_SECRET, затем пересоберите приложение.",
     retry: "Попробовать ещё раз",
     errorTitle: "Не удалось загрузить данные",
     errorText:

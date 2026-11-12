@@ -1,9 +1,10 @@
 import type { ISODate, Period } from "@/lib/api/contracts";
 import { MOCK_TODAY } from "@/lib/api/mock/seed";
+import { dataMode } from "@/lib/mode";
 
-/** Демо (мок без базы и бэкенда): время заморожено, чтобы демо всегда показывало октябрь. */
+/** Демо (JALAQY_DEMO=1): время заморожено, чтобы демо всегда показывало октябрь. */
 function isFrozen(): boolean {
-  return !process.env.JALAQY_API_URL && !process.env.FIREBASE_PROJECT_ID;
+  return dataMode() === "demo";
 }
 
 const ALMATY = new Intl.DateTimeFormat("en-CA", {

@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { NotConfigured } from "@/components/account/NotConfigured";
 import { Card, Skeleton } from "@/components/ui";
 import { t } from "@/i18n";
-import { isDemo } from "@/lib/api";
+import { isConfigured, isDemo } from "@/lib/api";
 import { getSession } from "@/lib/session";
 import { homeFor, safeNext } from "@/lib/session-codec";
 import { LoginForm } from "./LoginForm";
@@ -16,7 +17,12 @@ async function LoginWithNext({ searchParams }: { searchParams: Promise<{ next?: 
   // уже вошли — сразу на свой экран
   const session = await getSession();
   if (session) redirect(homeFor(session.role));
-  return <LoginForm next={safeNext(next) ?? undefined} demo={isDemo} />;
+  return (
+    <>
+      {!isConfigured && <NotConfigured />}
+      <LoginForm next={safeNext(next) ?? undefined} demo={isDemo} />
+    </>
+  );
 }
 
 function LoginSkeleton() {
