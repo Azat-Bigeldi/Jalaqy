@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { NotConfigured } from "@/components/account/NotConfigured";
 import { Card, Skeleton } from "@/components/ui";
 import { t } from "@/i18n";
-import { isDemo } from "@/lib/api";
+import { isConfigured, isDemo } from "@/lib/api";
 import { getSession } from "@/lib/session";
 import { homeFor } from "@/lib/session-codec";
 import { RegisterForm } from "./RegisterForm";
@@ -18,7 +19,12 @@ async function Register() {
   if (isDemo) redirect("/onboarding");
   const session = await getSession();
   if (session) redirect(homeFor(session.role));
-  return <RegisterForm needCode={Boolean(process.env.JALAQY_SIGNUP_CODE)} />;
+  return (
+    <>
+      {!isConfigured && <NotConfigured />}
+      <RegisterForm needCode={Boolean(process.env.JALAQY_SIGNUP_CODE)} />
+    </>
+  );
 }
 
 export default function RegisterPage() {

@@ -6,6 +6,7 @@
     "dev": "next dev",
     "dev:app": "JALAQY_SITE=app next dev -p 3002",
     "dev:landing": "JALAQY_SITE=landing JALAQY_APP_URL=http://localhost:3002 next dev -p 3003",
+    "dev:demo": "JALAQY_DEMO=1 FIREBASE_PROJECT_ID= next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

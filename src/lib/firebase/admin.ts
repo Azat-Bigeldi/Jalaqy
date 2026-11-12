@@ -1,6 +1,7 @@
 import "server-only";
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
+import { hasFirebaseKeys } from "@/lib/mode";
 
 /*
  * Подключение к Firebase с сервера (Admin SDK). Ключ сервисного аккаунта —
@@ -8,11 +9,7 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
  */
 
 export function isFirebaseConfigured(): boolean {
-  return Boolean(
-    process.env.FIREBASE_PROJECT_ID &&
-    process.env.FIREBASE_CLIENT_EMAIL &&
-    process.env.FIREBASE_PRIVATE_KEY,
-  );
+  return hasFirebaseKeys();
 }
 
 function app(): App {

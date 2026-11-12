@@ -32,6 +32,9 @@ export default defineConfig({
       JALAQY_DATA_DIR: ".e2e-data",
       // e2e идут на моке, даже если в .env.local есть ключи Firebase
       FIREBASE_PROJECT_ID: "",
+      JALAQY_DEMO: "1",
+      // и на всём сайте сразу (лендинг + приложение), что бы ни стояло в .env.local
+      JALAQY_SITE: "",
     },
     url: baseURL,
     reuseExistingServer: !process.env.CI,
