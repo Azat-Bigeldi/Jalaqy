@@ -12,6 +12,18 @@ export function isFirebaseConfigured(): boolean {
   return hasFirebaseKeys();
 }
 
+/**
+ * Значение, вставленное в настройки хостинга «как в .env»: с кавычками по краям,
+ * пробелами или запятой в конце (если скопировано из JSON-ключа). Убираем лишнее.
+ */
+export function clean(value: string): string {
+  return value
+    .trim()
+    .replace(/,$/, "")
+    .replace(/^(["'])([\s\S]*)\1$/, "$2")
+    .trim();
+}
+
 function app(): App {
   const existing = getApps()[0];
   if (existing) return existing;
@@ -22,10 +34,10 @@ function app(): App {
   }
   return initializeApp({
     credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      projectId: clean(process.env.FIREBASE_PROJECT_ID!),
+      clientEmail: clean(process.env.FIREBASE_CLIENT_EMAIL!),
       // В .env и в Vercel ключ хранится одной строкой с «\n»
-      privateKey: process.env.FIREBASE_PRIVATE_KEY!.replace(/\\n/g, "\n"),
+      privateKey: clean(process.env.FIREBASE_PRIVATE_KEY!).replace(/\\n/g, "\n"),
     }),
   });
 }
